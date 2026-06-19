@@ -1,0 +1,1327 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mi Negocio 2026</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0f0f13; --surface: #1a1a24; --border: #2e2e42;
+  --text: #e8e8f0; --text2: #9898b0; --text3: #5a5a78;
+  --green: #4ade80; --green-bg: #052e16;
+  --amber: #fbbf24; --amber-bg: #2d1f04;
+  --red: #f87171; --red-bg: #2d0a0a;
+  --blue: #60a5fa; --blue-bg: #0c1e3d;
+  --accent: #7c6ff7; --accent-light: #1e1b4b;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.topbar-brand { display: flex; align-items: center; gap: 10px; }
+.topbar-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; box-shadow: 0 0 12px rgba(124,111,247,0.4); }
+.topbar-title { font-size: 15px; font-weight: 600; }
+.topbar-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+.refresh-btn { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; cursor: pointer; color: var(--text2); font-size: 13px; }
+.refresh-btn:hover { background: var(--bg); }
+.nav-tabs { display: flex; background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; overflow-x: auto; }
+.nav-tab { padding: 12px 16px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; }
+.nav-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 16px 20px; max-width: 900px; margin: 0 auto; }
+.metric { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+.metric-label { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+.metric-value { font-size: 26px; font-weight: 700; }
+.metric-value.green { color: var(--green); }
+.metric-value.amber { color: var(--amber); }
+.metric-value.red { color: var(--red); }
+.content { max-width: 900px; margin: 0 auto; padding: 0 20px 100px; }
+.alerta { background: var(--amber-bg); border: 1px solid #f5c842; border-radius: 10px; padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--amber); margin-bottom: 14px; }
+.toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.search-wrap { flex: 1; min-width: 200px; position: relative; }
+.search-wrap input { width: 100%; padding: 9px 12px 9px 36px; border: 1px solid var(--border); border-radius: 10px; font-size: 14px; background: var(--surface); color: var(--text); outline: none; }
+.search-wrap input:focus { border-color: var(--accent); }
+.search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; }
+.filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+.f-btn { padding: 8px 14px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; }
+.f-btn:hover { background: var(--bg); }
+.f-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.lista { display: flex; flex-direction: column; gap: 8px; }
+.cliente-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: border-color 0.15s; }
+.cliente-card:hover { border-color: var(--accent); }
+.avatar { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex-shrink: 0; }
+.info { flex: 1; min-width: 0; }
+.nombre { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.derecha { text-align: right; flex-shrink: 0; }
+.fecha { font-size: 11px; color: var(--text3); margin-bottom: 5px; }
+.badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 99px; display: inline-block; }
+.badge.activo { background: var(--green-bg); color: var(--green); }
+.badge.proximo { background: var(--amber-bg); color: var(--amber); }
+.badge.vencido { background: var(--red-bg); color: var(--red); }
+.badge.sin-fecha { background: var(--bg); color: var(--text3); }
+.v-badge { font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 99px; background: var(--blue-bg); color: var(--blue); }
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+.modal-overlay.open { display: flex; }
+.modal { background: var(--surface); border-radius: 16px; width: 100%; max-width: 500px; max-height: 92vh; overflow-y: auto; padding: 24px; }
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.modal-title { font-size: 16px; font-weight: 700; }
+.modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--text2); }
+.form-group { margin-bottom: 14px; }
+.form-label { font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 5px; display: block; text-transform: uppercase; letter-spacing: 0.04em; }
+.form-input, .form-select { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; color: var(--text); background: var(--surface); outline: none; }
+.form-input:focus, .form-select:focus { border-color: var(--accent); }
+.form-input[readonly] { background: var(--bg); color: var(--text2); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn-primary { width: 100%; padding: 12px; border-radius: 10px; background: var(--accent); color: #fff; border: none; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+.btn-primary:hover { background: #2e2e7a; }
+.btn-primary:disabled { background: var(--text3); cursor: not-allowed; }
+.ganancia-box { background: var(--green-bg); border: 1px solid #b8e0c8; border-radius: 10px; padding: 12px 14px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.ganancia-label { font-size: 12px; color: var(--green); font-weight: 600; }
+.ganancia-value { font-size: 20px; color: var(--green); font-weight: 700; }
+.success-box { background: var(--green-bg); border: 1px solid #b8e0c8; border-radius: 10px; padding: 14px; text-align: center; margin-bottom: 14px; }
+.success-box p { color: var(--green); font-weight: 600; font-size: 14px; }
+.error-msg { background: var(--red-bg); border: 1px solid #f5b8b8; border-radius: 10px; padding: 12px; color: var(--red); font-size: 13px; margin-bottom: 14px; }
+.detalle-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.detalle-label { font-size: 11px; color: var(--text3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; }
+.detalle-value { font-size: 14px; font-weight: 500; }
+.fab { position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px; border-radius: 50%; background: var(--accent); color: #fff; border: none; font-size: 28px; cursor: pointer; box-shadow: 0 4px 16px rgba(58,58,140,0.35); display: flex; align-items: center; justify-content: center; z-index: 150; }
+.fab:hover { background: #2e2e7a; }
+.empty { text-align: center; padding: 3rem 1rem; color: var(--text3); font-size: 14px; }
+.loading { text-align: center; padding: 2rem; color: var(--text2); font-size: 14px; }
+.section-hidden { display: none; }
+.cuenta-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+.cuenta-header { padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+.cuenta-plat { font-size: 13px; font-weight: 700; color: var(--text); }
+.cuenta-correo { font-size: 12px; color: var(--text2); margin-top: 2px; }
+.cuenta-slots-summary { display: flex; gap: 4px; align-items: center; }
+.slot-mini { width: 12px; height: 12px; border-radius: 3px; }
+.slot-mini.ocupado { background: var(--accent); }
+.slot-mini.libre { background: var(--green); }
+.slot-mini.bloqueado { background: var(--border); }
+.cuenta-body { padding: 12px 16px; border-top: 1px solid var(--border); display: none; }
+.cuenta-body.open { display: block; }
+.slot-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 0.5px solid var(--border); }
+.slot-row:last-child { border-bottom: none; }
+.slot-num { font-size: 11px; color: var(--text3); font-weight: 600; width: 40px; flex-shrink: 0; }
+.slot-cliente { flex: 1; font-size: 13px; font-weight: 500; color: var(--text); }
+.slot-libre-tag { font-size: 11px; color: var(--green); font-weight: 600; }
+.slot-bloqueado-tag { font-size: 11px; color: var(--text3); }
+.slot-action { font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); background: transparent; cursor: pointer; color: var(--red); }
+.cuenta-info { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.cuenta-info-item { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+.cuenta-info-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+.cuenta-info-value { font-size: 12px; color: var(--text); font-weight: 500; word-break: break-all; }
+.plat-filter { padding: 6px 12px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface); font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; }
+.plat-filter.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+@media (max-width: 600px) {
+  .metrics { grid-template-columns: repeat(2, 1fr); padding: 12px; }
+  .content { padding: 0 12px 100px; }
+  .form-row { grid-template-columns: 1fr; }
+  .detalle-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="topbar-icon">M</div>
+    <div>
+      <div class="topbar-title">Mi Negocio 2026</div>
+      <div class="topbar-sub" id="ultima-act">Cargando...</div>
+    </div>
+  </div>
+  <button class="refresh-btn" onclick="cargarDatos()">↻ Actualizar</button>
+</div>
+
+<div class="nav-tabs">
+  <div class="nav-tab active" onclick="mostrarSeccion('clientes', this)">👥 Clientes</div>
+  <div class="nav-tab" onclick="mostrarSeccion('cuentas', this)">🔑 Cuentas</div>
+  <div class="nav-tab" onclick="mostrarSeccion('ganancias', this)">📊 Ganancias</div>
+  <div class="nav-tab" onclick="mostrarSeccion('config', this)">⚙️ Configuración</div>
+</div>
+
+<!-- SECCIÓN CLIENTES -->
+<div id="sec-clientes">
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">Total</div><div class="metric-value" id="m-total">—</div></div>
+    <div class="metric"><div class="metric-label">Activos</div><div class="metric-value green" id="m-activos">—</div></div>
+    <div class="metric"><div class="metric-label">Por vencer</div><div class="metric-value amber" id="m-proximos">—</div></div>
+    <div class="metric"><div class="metric-label">Vencidos</div><div class="metric-value red" id="m-vencidos">—</div></div>
+  </div>
+  <div class="content">
+    <div id="alerta-container"></div>
+    <div class="toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="buscar" placeholder="Buscar cliente, paquete o vendedor..." oninput="filtrar()">
+      </div>
+    </div>
+    <div class="filters">
+      <button class="f-btn active" onclick="setFiltro('todos',this)">Todos</button>
+      <button class="f-btn" onclick="setFiltro('activo',this)">Activos</button>
+      <button class="f-btn" onclick="setFiltro('proximo',this)">Por vencer</button>
+      <button class="f-btn" onclick="setFiltro('vencido',this)">Vencidos</button>
+      <button class="f-btn" onclick="setFiltro('yo',this)">Mis ventas</button>
+      <button class="f-btn" onclick="setFiltro('vendedor',this)">Vendedor</button>
+      <button class="f-btn" onclick="setFiltro('archivado',this)">🗂 Archivados</button>
+    </div>
+    <div class="lista" id="lista"><div class="loading">Conectando con Google Sheets...</div></div>
+  </div>
+</div>
+
+<!-- SECCIÓN CUENTAS -->
+<div id="sec-cuentas" class="section-hidden">
+  <div class="content" style="padding-top:20px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="font-size:15px;font-weight:700;">Cuentas</div>
+      <button onclick="abrirModalNuevaCuenta()" style="padding:8px 14px;border-radius:8px;background:var(--accent);color:#fff;border:none;font-size:13px;font-weight:600;cursor:pointer;">+ Nueva cuenta</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;" id="filtros-plataforma"></div>
+    <div id="cuentas-content"><div class="loading">Cargando cuentas...</div></div>
+  </div>
+</div>
+
+<!-- SECCIÓN GANANCIAS -->
+<div id="sec-ganancias" class="section-hidden">
+  <div class="content" style="padding-top:20px;">
+    <div id="ganancias-content"><div class="loading">Cargando ganancias...</div></div>
+  </div>
+</div>
+
+<!-- SECCIÓN CONFIGURACIÓN -->
+<div id="sec-config" class="section-hidden">
+  <div class="content" style="padding-top:20px;">
+    <div id="config-content"></div>
+  </div>
+</div>
+
+<button class="fab" onclick="abrirModalNuevo()" title="Agregar cliente">+</button>
+
+<!-- MODAL NUEVO CLIENTE -->
+<div class="modal-overlay" id="modal-nuevo">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Nuevo cliente</div>
+      <button class="modal-close" onclick="cerrarModal('modal-nuevo')">✕</button>
+    </div>
+    <div id="form-status"></div>
+    <div class="form-group">
+      <label class="form-label">Nombre del cliente *</label>
+      <input class="form-input" id="n-cliente" placeholder="Ej. María López" oninput="generarID()">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">ID generado</label>
+        <input class="form-input" id="n-id" readonly>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contacto (tel)</label>
+        <input class="form-input" id="n-contacto" placeholder="Ej. 998 123 4567">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Paquete *</label>
+        <select class="form-select" id="n-paquete" onchange="actualizarPrecio()">
+          <option value="">Selecciona...</option>
+          <option value="Netflix 4K|90|20|10">Netflix 4K — $90</option>
+          <option value="Spotify Prem.|60|25|17">Spotify Prem. — $60</option>
+          <option value="YouTube Prem.|60|25|11">YouTube Prem. — $60</option>
+          <option value="Disney+ Prem.|70|15|17.5">Disney+ Prem. — $70</option>
+          <option value="HBO Max|70|20|15">HBO Max — $70</option>
+          <option value="Crunchyroll (1 disp)|55|15|21.25">Crunchyroll (1 disp) — $55</option>
+          <option value="Combo anime (NF + Crunchy)|140|30|31.3">Combo Anime NF+Crunchy — $140</option>
+          <option value="paramount+|55|15|10">Paramount+ — $55</option>
+          <option value="Combo Estadio Paramount+ & Disney+|120|30|23">Combo Estadio — $120</option>
+          <option value="Dúo Cine (DIS + HBO)|130|30|27.5">Dúo Cine DIS+HBO — $130</option>
+          <option value="Combo Melómano (SP + YT)|110|38|30">Combo Melómano SP+YT — $110</option>
+          <option value="Triple Play (NF + DIS + HBO)|210|44|33.5">Triple Play NF+DIS+HBO — $210</option>
+          <option value="Combo Full Pro (NF+SP+YT)|180|40|38">Combo Full Pro NF+SP+YT — $180</option>
+          <option value="HOME TEATER NF+SP+YT+DIS+HBO|299|70|54.5">HOME TEATER — $299</option>
+          <option value="disney + crunchy|115|31|30">Disney + Crunchy — $115</option>
+          <option value="Crunchyroll (1 disp) + spotify|105|35|33.25">Crunchyroll + Spotify — $105</option>
+          <option value="Netflix 4K + HBO|145|30|20">Netflix 4K + HBO — $145</option>
+          <option value="NETFLIX + YT PREMIUM|140|30|26">Netflix + YT Premium — $140</option>
+          <option value="NETFLIX + PARAMOUNT|135|30|22.5">Netflix + Paramount — $135</option>
+          <option value="NETFLIX + SPOTIFY|140|32|30">Netflix + Spotify — $140</option>
+          <option value="disney + spoti|120|34.5|30">Disney + Spotify — $120</option>
+          <option value="disney + netflix|160|35|27.5">Disney + Netflix — $160</option>
+          <option value="2 netfllix|180|40|20">2 Netflix — $180</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Precio</label>
+        <input class="form-input" id="n-precio" readonly>
+      </div>
+    </div>
+    <div class="form-group" id="n-cuentas-container">
+      <label class="form-label">Cuenta(s) asignada(s)</label>
+      <div id="n-cuentas-selects">
+        <div style="font-size:13px;color:var(--text3);">Selecciona primero un paquete...</div>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Fecha de inicio *</label>
+        <input class="form-input" type="date" id="n-inicio" onchange="calcularRenovacion()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Renovación</label>
+        <input class="form-input" id="n-renovacion" readonly>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Vendedor *</label>
+        <select class="form-select" id="n-vendedor" onchange="calcularGanancia()">
+          <option value="YO">YO</option>
+          <option value="ximenita">Ximenita</option>
+          <option value="david">David Guzmán</option>
+          <option value="saito">Saito</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Estado de pago</label>
+        <select class="form-select" id="n-pago">
+          <option value="PAGADO">PAGADO</option>
+          <option value="PENDIENTE">PENDIENTE</option>
+        </select>
+      </div>
+    </div>
+    <div id="ganancia-preview" style="display:none;" class="ganancia-box">
+      <div>
+        <div class="ganancia-label">Tu ganancia</div>
+        <div class="ganancia-value" id="g-valor">$0</div>
+      </div>
+      <div id="comision-wrap" style="display:none;text-align:right;">
+        <div class="ganancia-label" style="color:var(--amber);">Comisión vendedor</div>
+        <div style="font-size:16px;color:var(--amber);font-weight:700;" id="g-com">$0</div>
+      </div>
+    </div>
+    <button class="btn-primary" id="btn-guardar" onclick="guardarCliente()">Guardar cliente</button>
+  </div>
+</div>
+
+<!-- MODAL EDITAR CLIENTE -->
+<div class="modal-overlay" id="modal-editar">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Editar cliente</div>
+      <button class="modal-close" onclick="cerrarModal('modal-editar')">✕</button>
+    </div>
+    <div id="editar-status"></div>
+    <div class="form-group">
+      <label class="form-label">Nombre del cliente</label>
+      <input class="form-input" id="e-cliente" placeholder="Nombre">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Contacto (tel)</label>
+      <input class="form-input" id="e-contacto" placeholder="Teléfono">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Paquete</label>
+        <select class="form-select" id="e-paquete" onchange="actualizarPrecioEditar()">
+          <option value="">Selecciona...</option>
+          <option value="Netflix 4K|90">Netflix 4K — $90</option>
+          <option value="Spotify Prem.|60">Spotify Prem. — $60</option>
+          <option value="YouTube Prem.|60">YouTube Prem. — $60</option>
+          <option value="Disney+ Prem.|70">Disney+ Prem. — $70</option>
+          <option value="HBO Max|70">HBO Max — $70</option>
+          <option value="Crunchyroll (1 disp)|55">Crunchyroll (1 disp) — $55</option>
+          <option value="Combo anime (NF + Crunchy)|140">Combo Anime NF+Crunchy — $140</option>
+          <option value="paramount+|55">Paramount+ — $55</option>
+          <option value="Combo Estadio Paramount+ & Disney+|120">Combo Estadio — $120</option>
+          <option value="Dúo Cine (DIS + HBO)|130">Dúo Cine DIS+HBO — $130</option>
+          <option value="Combo Melómano (SP + YT)|110">Combo Melómano SP+YT — $110</option>
+          <option value="Triple Play (NF + DIS + HBO)|210">Triple Play NF+DIS+HBO — $210</option>
+          <option value="Combo Full Pro (NF+SP+YT)|180">Combo Full Pro — $180</option>
+          <option value="HOME TEATER NF+SP+YT+DIS+HBO|299">HOME TEATER — $299</option>
+          <option value="disney + crunchy|115">Disney + Crunchy — $115</option>
+          <option value="Crunchyroll (1 disp) + spotify|105">Crunchyroll + Spotify — $105</option>
+          <option value="Netflix 4K + HBO|145">Netflix 4K + HBO — $145</option>
+          <option value="NETFLIX + YT PREMIUM|140">Netflix + YT Premium — $140</option>
+          <option value="NETFLIX + PARAMOUNT|135">Netflix + Paramount — $135</option>
+          <option value="NETFLIX + SPOTIFY|140">Netflix + Spotify — $140</option>
+          <option value="disney + spoti|120">Disney + Spotify — $120</option>
+          <option value="disney + netflix|160">Disney + Netflix — $160</option>
+          <option value="2 netfllix|180">2 Netflix — $180</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Precio</label>
+        <input class="form-input" id="e-precio" readonly>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Cuenta asignada</label>
+      <input class="form-input" id="e-cuenta" placeholder="correo@cuenta.com">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Fecha de inicio</label>
+        <input class="form-input" type="date" id="e-inicio" onchange="calcularRenovacionEditar()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Renovación</label>
+        <input class="form-input" id="e-renovacion" placeholder="DD/MM/YYYY">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Vendedor</label>
+        <select class="form-select" id="e-vendedor">
+          <option value="YO">YO</option>
+          <option value="ximenita">Ximenita</option>
+          <option value="david">David Guzmán</option>
+          <option value="saito">Saito</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Estado de pago</label>
+        <select class="form-select" id="e-pago">
+          <option value="PAGADO">PAGADO</option>
+          <option value="PENDIENTE">PENDIENTE</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Estado del cliente</label>
+        <select class="form-select" id="e-estado">
+          <option value="ACTIVO">ACTIVO</option>
+          <option value="ARCHIVADO">ARCHIVADO</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Notas</label>
+      <input class="form-input" id="e-notas" placeholder="Ej. Paga tarde, quiere descuento...">
+    </div>
+    <input type="hidden" id="e-id">
+    <input type="hidden" id="e-row">
+    <button class="btn-primary" id="btn-editar" onclick="guardarEdicion()">Guardar cambios</button>
+  </div>
+</div>
+
+<!-- MODAL DETALLE -->
+<div class="modal-overlay" id="modal-detalle">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="d-titulo">Detalle</div>
+      <button class="modal-close" onclick="cerrarModal('modal-detalle')">✕</button>
+    </div>
+    <div id="d-contenido"></div>
+  </div>
+</div>
+
+<script>
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRTbuyYy6v3pCi39iSTs9ISef7OacyzS4i1_-qLLdmfCGmgeWeyQ0q177VOJGxsPX5IpaQjTLq_ipui/pub?gid=0&single=true&output=csv';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw_r9t-i8Y0Mv6U78gVOg1eOYVy7r40qjQXXU8kicBaiot3c-S9Q6zF6-33b1FxgLqN0A/exec';
+const CUENTAS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRTbuyYy6v3pCi39iSTs9ISef7OacyzS4i1_-qLLdmfCGmgeWeyQ0q177VOJGxsPX5IpaQjTLq_ipui/pub?gid=676175871&single=true&output=csv';
+const PAGOS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRTbuyYy6v3pCi39iSTs9ISef7OacyzS4i1_-qLLdmfCGmgeWeyQ0q177VOJGxsPX5IpaQjTLq_ipui/pub?gid=2014189315&single=true&output=csv';
+
+let todosPagos = [];
+
+let todasCuentas = [];
+let filtroPlatActual = 'TODAS';
+
+const PLAT_ICONS = {
+  'NETFLIX':'🎬','SPOTIFY':'🎵','YOUTUBE PREM':'▶️','YOUTUBE':'▶️',
+  'HBO':'📺','DISNEY':'🏰','PARAMOUNT':'⭐','CRUNCHYROLL':'⚡'
+};
+
+let todosClientes = [];
+let filtroActual = 'todos';
+let ultimoID = 1073;
+
+const COLORES = [
+  {bg:'#eeedfe',color:'#3c3489'},{bg:'#e1f5ee',color:'#085041'},
+  {bg:'#e6f1fb',color:'#0c447c'},{bg:'#faece7',color:'#712b13'},
+  {bg:'#faeeda',color:'#633806'},{bg:'#fbeaf0',color:'#72243e'},
+];
+
+const COMISIONES = { ximenita:1, david:1, saito:1 };
+
+const PAQUETES_GANANCIA = {
+  'Netflix 4K':{gananciaAmigo:20,gananciaNeta:10},
+  'Spotify Prem.':{gananciaAmigo:25,gananciaNeta:17},
+  'YouTube Prem.':{gananciaAmigo:25,gananciaNeta:11},
+  'Disney+ Prem.':{gananciaAmigo:15,gananciaNeta:17.5},
+  'HBO Max':{gananciaAmigo:20,gananciaNeta:15},
+  'Crunchyroll (1 disp)':{gananciaAmigo:15,gananciaNeta:21.25},
+  'Combo anime (NF + Crunchy)':{gananciaAmigo:30,gananciaNeta:31.3},
+  'paramount+':{gananciaAmigo:15,gananciaNeta:10},
+  'Combo Estadio Paramount+ & Disney+':{gananciaAmigo:30,gananciaNeta:23},
+  'Dúo Cine (DIS + HBO)':{gananciaAmigo:30,gananciaNeta:27.5},
+  'Combo Melómano (SP + YT)':{gananciaAmigo:38,gananciaNeta:30},
+  'Triple Play (NF + DIS + HBO)':{gananciaAmigo:44,gananciaNeta:33.5},
+  'Combo Full Pro (NF+SP+YT)':{gananciaAmigo:40,gananciaNeta:38},
+  'HOME TEATER NF+SP+YT+DIS+HBO':{gananciaAmigo:70,gananciaNeta:54.5},
+  'disney + crunchy':{gananciaAmigo:31,gananciaNeta:30},
+  'Crunchyroll (1 disp) + spotify':{gananciaAmigo:35,gananciaNeta:33.25},
+  'Netflix 4K + HBO':{gananciaAmigo:30,gananciaNeta:20},
+  'NETFLIX + YT PREMIUM':{gananciaAmigo:30,gananciaNeta:26},
+  'NETFLIX + PARAMOUNT':{gananciaAmigo:30,gananciaNeta:22.5},
+  'NETFLIX + SPOTIFY':{gananciaAmigo:32,gananciaNeta:30},
+  'disney + spoti':{gananciaAmigo:34.5,gananciaNeta:30},
+  'disney + netflix':{gananciaAmigo:35,gananciaNeta:27.5},
+  '2 netfllix':{gananciaAmigo:40,gananciaNeta:20},
+};
+
+function iniciales(n) {
+  if (!n) return '?';
+  const p = n.trim().split(' ');
+  return p.length >= 2 ? (p[0][0]+p[1][0]).toUpperCase() : n.substring(0,2).toUpperCase();
+}
+function colorAvatar(n) {
+  let h = 0; for (let c of (n||'')) h += c.charCodeAt(0);
+  return COLORES[h % COLORES.length];
+}
+function parseFecha(s) {
+  if (!s) return null; s = s.trim();
+  const p = s.split('/');
+  if (p.length === 3) { const d = new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0])); return isNaN(d.getTime())?null:d; }
+  const d = new Date(s); return isNaN(d.getTime())?null:d;
+}
+function diasRestantes(f) {
+  const fecha = parseFecha(f); if (!fecha) return null;
+  const hoy = new Date(); hoy.setHours(0,0,0,0); fecha.setHours(0,0,0,0);
+  return Math.round((fecha-hoy)/86400000);
+}
+function estadoCliente(d) {
+  if (d===null) return 'sin-fecha';
+  if (d < 0) return 'vencido';
+  if (d <= 5) return 'proximo';
+  return 'activo';
+}
+function badgeEstado(e,d) {
+  if (e==='vencido') return `<span class="badge vencido">Vencido hace ${Math.abs(d)}d</span>`;
+  if (e==='proximo') return `<span class="badge proximo">${d===0?'Vence hoy':'Vence en '+d+'d'}</span>`;
+  if (e==='activo') return `<span class="badge activo">Activo</span>`;
+  return `<span class="badge sin-fecha">Sin fecha</span>`;
+}
+function parseCSV(text) {
+  const lineas = text.trim().split('\n');
+  const headers = lineas[0].split(',').map(h=>h.replace(/"/g,'').trim().toLowerCase());
+  return lineas.slice(1).map(linea => {
+    const vals=[]; let dentro=false,actual='';
+    for (let i=0;i<linea.length;i++) {
+      const c=linea[i];
+      if(c==='"'){dentro=!dentro;}
+      else if(c===','&&!dentro){vals.push(actual.trim());actual='';}
+      else{actual+=c;}
+    }
+    vals.push(actual.trim());
+    const obj={};
+    headers.forEach((h,i)=>obj[h]=(vals[i]||'').replace(/"/g,'').trim());
+    return obj;
+  });
+}
+
+function mostrarSeccion(sec, btn) {
+  document.querySelectorAll('[id^="sec-"]').forEach(s=>s.classList.add('section-hidden'));
+  document.getElementById('sec-'+sec).classList.remove('section-hidden');
+  document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  if (sec==='cuentas') cargarCuentas();
+  if (sec==='ganancias') renderGanancias();
+  if (sec==='config') renderConfig();
+}
+
+// Estado local para overrides que no dependen del CSV
+function getEstadoLocal(id) {
+  try {
+    const estados = JSON.parse(localStorage.getItem('estados_clientes')||'{}');
+    return estados[id] || null;
+  } catch(e) { return null; }
+}
+function setEstadoLocal(id, estado) {
+  try {
+    const estados = JSON.parse(localStorage.getItem('estados_clientes')||'{}');
+    estados[id] = estado;
+    localStorage.setItem('estados_clientes', JSON.stringify(estados));
+  } catch(e) {}
+}
+
+function cargarDatos() {
+  document.getElementById('lista').innerHTML = '<div class="loading">Actualizando...</div>';
+  fetch(CSV_URL+'&t='+Date.now())
+    .then(r=>{if(!r.ok)throw new Error();return r.text();})
+    .then(text=>{
+      const filas = parseCSV(text);
+      todosClientes = filas.map(f=>{
+        const renovacion = f['renovacion']||f['renovación']||'';
+        const dias = diasRestantes(renovacion);
+        const idNum = parseInt((f['id']||'').replace('CL-',''));
+        if (!isNaN(idNum) && idNum > ultimoID) ultimoID = idNum;
+        return {
+          id:f['id']||'', cliente:f['cliente']||'', contacto:f['contacto']||'',
+          paquete:f['paquete']||'', precio:f['precio']||'', cuenta:f['cuenta']||'',
+          inicio:f['inicio']||'', renovacion, vendedor:f['vendedor']||'',
+          pago:f['pago']||'', ganancia:f['ganancia']||'', dias, estado:estadoCliente(dias),
+          estado_raw: (getEstadoLocal(f['id']) || f['estado'] || 'ACTIVO').toUpperCase(),
+          notas:f['notas']||'',
+        };
+      });
+      actualizarMetricas(); actualizarAlerta(); filtrar();
+      const ahora = new Date();
+      document.getElementById('ultima-act').textContent = 'Actualizado '+ahora.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+    })
+    .catch(()=>{
+      document.getElementById('lista').innerHTML='<div class="error-msg">⚠️ No se pudo cargar. Verifica tu conexión.</div>';
+    });
+}
+
+function actualizarMetricas() {
+  const activos = todosClientes.filter(c=>c.estado_raw!=='ARCHIVADO');
+  document.getElementById('m-total').textContent = activos.length;
+  document.getElementById('m-activos').textContent = activos.filter(c=>c.estado==='activo').length;
+  document.getElementById('m-proximos').textContent = activos.filter(c=>c.estado==='proximo').length;
+  document.getElementById('m-vencidos').textContent = activos.filter(c=>c.estado==='vencido').length;
+}
+function actualizarAlerta() {
+  const p = todosClientes.filter(c=>c.estado==='proximo');
+  document.getElementById('alerta-container').innerHTML = p.length>0
+    ? `<div class="alerta">⚠️ ${p.length} cliente${p.length!==1?'s':''} vence${p.length===1?'':'n'} en los próximos 5 días</div>` : '';
+}
+function setFiltro(f,btn) {
+  filtroActual=f;
+  document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active'); filtrar();
+}
+function filtrar() {
+  const b=(document.getElementById('buscar').value||'').toLowerCase();
+  let lista=todosClientes;
+  if(filtroActual==='archivado') {
+    lista=lista.filter(c=>c.estado_raw==='ARCHIVADO');
+  } else {
+    lista=lista.filter(c=>c.estado_raw!=='ARCHIVADO');
+    if(filtroActual==='activo') lista=lista.filter(c=>c.estado==='activo');
+    else if(filtroActual==='proximo') lista=lista.filter(c=>c.estado==='proximo');
+    else if(filtroActual==='vencido') lista=lista.filter(c=>c.estado==='vencido');
+    else if(filtroActual==='yo') lista=lista.filter(c=>c.vendedor.toLowerCase()==='yo');
+    else if(filtroActual==='vendedor') lista=lista.filter(c=>c.vendedor.toLowerCase()!=='yo'&&c.vendedor!=='');
+  }
+  if(b) lista=lista.filter(c=>c.cliente.toLowerCase().includes(b)||c.paquete.toLowerCase().includes(b)||c.vendedor.toLowerCase().includes(b)||c.contacto.includes(b));
+  lista.sort((a,b)=>(a.dias===null?999:a.dias)-(b.dias===null?999:b.dias));
+  const cont=document.getElementById('lista');
+  if(!lista.length){cont.innerHTML='<div class="empty">No se encontraron clientes</div>';return;}
+  cont.innerHTML=lista.map(c=>{
+    const col=colorAvatar(c.cliente);
+    const esV=c.vendedor&&c.vendedor.toLowerCase()!=='yo';
+    const precio=c.precio?'$'+parseFloat(c.precio).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2}):'';
+    const esArchivado = c.estado_raw==='ARCHIVADO';
+    return `<div class="cliente-card" onclick="verDetalle('${c.id}')" style="${esArchivado?'opacity:0.6;border-style:dashed;':''}">
+      <div class="avatar" style="background:${esArchivado?'var(--bg)':col.bg};color:${esArchivado?'var(--text3)':col.color};">${iniciales(c.cliente)}</div>
+      <div class="info">
+        <div class="nombre">${c.cliente}${esV?`<span class="v-badge">${c.vendedor}</span>`:''}${esArchivado?'<span style="font-size:10px;padding:2px 6px;border-radius:99px;background:var(--bg);color:var(--text3);margin-left:6px;">Archivado</span>':''}</div>
+        <div class="sub">${c.paquete||'Sin paquete'}${precio?' · '+precio:''}</div>
+      </div>
+      <div class="derecha">
+        <div class="fecha">${c.renovacion||'Sin fecha'}</div>
+        ${esArchivado?'<span class="badge sin-fecha">Archivado</span>':badgeEstado(c.estado,c.dias)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function verDetalle(id) {
+  const c=todosClientes.find(x=>x.id===id); if(!c) return;
+  const col=colorAvatar(c.cliente);
+  const ganancia=parseFloat(c.ganancia)||0;
+  const esVendedor = c.vendedor && c.vendedor.toLowerCase()!=='yo';
+  const paqData = PAQUETES_GANANCIA[c.paquete];
+  const comisionVend = esVendedor && paqData ? paqData.gananciaAmigo : 0;
+  document.getElementById('d-titulo').textContent=c.cliente;
+  document.getElementById('d-contenido').innerHTML=`
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
+      <div class="avatar" style="width:52px;height:52px;font-size:18px;background:${col.bg};color:${col.color};">${iniciales(c.cliente)}</div>
+      <div>
+        <div style="font-size:16px;font-weight:700;">${c.cliente}</div>
+        <div style="font-size:13px;color:var(--text2);">${c.id} · ${c.contacto||'Sin contacto'}</div>
+        <div style="margin-top:4px;">${badgeEstado(c.estado,c.dias)}</div>
+      </div>
+    </div>
+    <div class="detalle-grid">
+      <div><div class="detalle-label">Paquete</div><div class="detalle-value">${c.paquete||'—'}</div></div>
+      <div><div class="detalle-label">Precio</div><div class="detalle-value">${c.precio?'$'+c.precio:'—'}</div></div>
+      <div><div class="detalle-label">Cuenta</div><div class="detalle-value" style="font-size:12px;">${c.cuenta||'—'}</div></div>
+      <div><div class="detalle-label">Vendedor</div><div class="detalle-value">${c.vendedor||'—'}</div></div>
+      <div><div class="detalle-label">Inicio</div><div class="detalle-value">${c.inicio||'—'}</div></div>
+      <div><div class="detalle-label">Renovación</div><div class="detalle-value">${c.renovacion||'—'}</div></div>
+      <div><div class="detalle-label">Pago</div><div class="detalle-value">${c.pago||'—'}</div></div>
+      <div><div class="detalle-label">Tu ganancia</div><div class="detalle-value" style="color:var(--green);font-weight:700;">${ganancia>0?'$'+ganancia.toFixed(2):'—'}</div></div>
+      ${esVendedor ? `<div><div class="detalle-label">Comisión ${c.vendedor}</div><div class="detalle-value" style="color:var(--amber);font-weight:700;">${comisionVend>0?'$'+comisionVend.toFixed(2):'—'}</div></div><div></div>` : ''}
+    </div>
+    ${c.notas ? `<div style="background:var(--amber-bg);border:1px solid var(--amber);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📝 <strong>Nota:</strong> ${c.notas}</div>` : ''}`;
+  const esArchivado = c.estado_raw==='ARCHIVADO';
+  document.getElementById('d-contenido').innerHTML += esArchivado ? `
+    <button onclick="reactivarCliente('${c.id}')" style="width:100%;padding:11px;border-radius:10px;background:var(--green);color:#fff;border:none;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;">✅ Reactivar cliente</button>` : `
+    <button onclick="abrirEditar('${c.id}')" style="width:100%;padding:11px;border-radius:10px;background:var(--accent);color:#fff;border:none;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;">✏️ Editar cliente</button>
+    <button onclick="confirmarArchivar('${c.id}')" style="width:100%;padding:11px;border-radius:10px;background:transparent;color:var(--red);border:1px solid var(--red);font-size:13px;font-weight:500;cursor:pointer;margin-top:8px;">Archivar cliente</button>`;
+  document.getElementById('modal-detalle').classList.add('open');
+}
+
+function abrirModalNuevo() {
+  document.getElementById('modal-nuevo').classList.add('open');
+  document.getElementById('form-status').innerHTML='';
+  document.getElementById('n-cliente').value='';
+  document.getElementById('n-contacto').value='';
+  document.getElementById('n-paquete').value='';
+  document.getElementById('n-precio').value='';
+  document.getElementById('n-cuenta').innerHTML='<option value="">Selecciona primero un paquete...</option>';
+  document.getElementById('n-cuenta-info').textContent='';
+  document.getElementById('n-renovacion').value='';
+  document.getElementById('n-vendedor').value='YO';
+  document.getElementById('n-pago').value='PAGADO';
+  document.getElementById('ganancia-preview').style.display='none';
+  document.getElementById('btn-guardar').disabled=false;
+  document.getElementById('btn-guardar').textContent='Guardar cliente';
+  const hoy=new Date().toISOString().split('T')[0];
+  document.getElementById('n-inicio').value=hoy;
+  calcularRenovacion(); generarID();
+}
+function cerrarModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function generarID() {
+  const nombre=document.getElementById('n-cliente').value.trim();
+  if(!nombre) return;
+  document.getElementById('n-id').value='CL-'+(ultimoID+1);
+}
+function calcularRenovacion() {
+  const inicio=document.getElementById('n-inicio').value; if(!inicio) return;
+  const d=new Date(inicio); d.setDate(d.getDate()+30);
+  document.getElementById('n-renovacion').value=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+function actualizarPrecio() {
+  const sel=document.getElementById('n-paquete').value;
+  if(!sel){
+    document.getElementById('n-precio').value='';
+    document.getElementById('ganancia-preview').style.display='none';
+    document.getElementById('n-cuenta').innerHTML='<option value="">Selecciona primero un paquete...</option>';
+    document.getElementById('n-cuenta-info').textContent='';
+    return;
+  }
+  const p=sel.split('|');
+  document.getElementById('n-precio').value='$'+p[1];
+  calcularGanancia();
+  cargarCuentasDisponibles(p[0]);
+}
+
+function cargarCuentasDisponibles(paquete) {
+  const plataformas = detectarPlataformas(paquete);
+  const container = document.getElementById('n-cuentas-selects');
+  
+  if (!todasCuentas.length) {
+    container.innerHTML = '<div style="font-size:13px;color:var(--text3);">Cargando cuentas...</div>';
+    setTimeout(() => cargarCuentasDisponibles(paquete), 1000);
+    return;
+  }
+
+  let html = '';
+  plataformas.forEach(plat => {
+    const cuentasPlat = todasCuentas.filter(c => c.plataforma === plat).map(cuenta => {
+      const libres = cuenta.slots.slice(0, cuenta.slotsTotal).filter(s => !s || s.trim() === '').length;
+      return { ...cuenta, libres };
+    }).filter(c => c.libres > 0);
+
+    html += `<div style="margin-bottom:10px;">
+      <div style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:5px;">${PLAT_ICONS[plat]||'📦'} ${plat}</div>`;
+    
+    if (!cuentasPlat.length) {
+      html += `<div style="font-size:12px;color:var(--red);padding:8px;background:var(--red-bg);border-radius:8px;">⚠️ Sin slots disponibles en ${plat}</div>`;
+    } else {
+      html += `<select class="form-select n-cuenta-plat" data-plat="${plat}">
+        <option value="">Selecciona cuenta de ${plat}...</option>
+        ${cuentasPlat.map(c => `<option value="${c.correo}">${c.nombre} — ${c.correo} (${c.libres} libre${c.libres!==1?'s':''})</option>`).join('')}
+      </select>`;
+    }
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+function detectarPlataformas(paquete) {
+  const p = paquete.toLowerCase();
+  const plats = [];
+  if (p.includes('netflix') || p.includes('nf') || p.includes('home teater')) plats.push('NETFLIX');
+  if (p.includes('spotify') || p.includes('sp') || p.includes('melómano') || p.includes('melomano')) plats.push('SPOTIFY');
+  if (p.includes('youtube') || p.includes('yt') || p.includes('premium')) plats.push('YOUTUBE PREM');
+  if (p.includes('disney') || p.includes('dis')) plats.push('DISNEY');
+  if (p.includes('hbo')) plats.push('HBO');
+  if (p.includes('paramount')) plats.push('PARAMOUNT');
+  if (p.includes('crunchy') || p.includes('crunchyroll')) plats.push('CRUNCHYROLL');
+  if (!plats.length) plats.push('NETFLIX');
+  return [...new Set(plats)];
+}
+function calcularGanancia() {
+  const sel=document.getElementById('n-paquete').value;
+  const vendedor=document.getElementById('n-vendedor').value.toLowerCase();
+  if(!sel){document.getElementById('ganancia-preview').style.display='none';return;}
+  const p=sel.split('|');
+  const gananciaAmigo=parseFloat(p[2]);
+  const gananciaMia=parseFloat(p[3]);
+  let miGanancia, comision=0;
+  if(vendedor==='yo'){miGanancia=gananciaMia+gananciaAmigo;}
+  else{comision=gananciaAmigo;miGanancia=gananciaMia;}
+  document.getElementById('g-valor').textContent='$'+miGanancia.toFixed(2);
+  const cw=document.getElementById('comision-wrap');
+  if(vendedor!=='yo'&&comision>0){cw.style.display='block';document.getElementById('g-com').textContent='$'+comision.toFixed(2);}
+  else{cw.style.display='none';}
+  document.getElementById('ganancia-preview').style.display='flex';
+}
+
+function guardarCliente() {
+  const cliente=document.getElementById('n-cliente').value.trim();
+  const paquete=document.getElementById('n-paquete').value;
+  const inicio=document.getElementById('n-inicio').value;
+  if(!cliente||!paquete||!inicio){
+    document.getElementById('form-status').innerHTML='<div class="error-msg">⚠️ Completa los campos obligatorios: nombre, paquete y fecha de inicio.</div>';
+    return;
+  }
+  const partes=paquete.split('|');
+  const vendedor=document.getElementById('n-vendedor').value.toLowerCase();
+  const gananciaAmigo=parseFloat(partes[2]);
+  const gananciaMia=parseFloat(partes[3]);
+  let miGanancia = vendedor==='yo' ? gananciaMia+gananciaAmigo : gananciaMia;
+
+  const datos={
+    id:'CL-'+(ultimoID+1),
+    cliente,
+    contacto:document.getElementById('n-contacto').value.trim(),
+    paquete:partes[0],
+    precio:partes[1],
+    cuenta:Array.from(document.querySelectorAll('.n-cuenta-plat')).map(s=>s.value).filter(Boolean).join(', '),
+    inicio:new Date(inicio).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}),
+    renovacion:document.getElementById('n-renovacion').value,
+    vendedor:document.getElementById('n-vendedor').value,
+    pago:document.getElementById('n-pago').value,
+    ganancia:miGanancia.toFixed(2)
+  };
+
+  const btn=document.getElementById('btn-guardar');
+  btn.disabled=true; btn.textContent='Guardando...';
+  document.getElementById('form-status').innerHTML='';
+
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify(datos)})
+    .then(r=>r.json())
+    .then(res=>{
+      if(res.status==='ok'){
+        ultimoID++;
+        document.getElementById('form-status').innerHTML='<div class="success-box"><p>✅ Cliente guardado correctamente</p></div>';
+        btn.textContent='Guardado ✓';
+        setTimeout(()=>{cerrarModal('modal-nuevo');cargarDatos();},1500);
+      } else {
+        throw new Error(res.message||'Error desconocido');
+      }
+    })
+    .catch(err=>{
+      document.getElementById('form-status').innerHTML=`<div class="error-msg">⚠️ No se pudo guardar. Intenta de nuevo.<br><small>${err.message}</small></div>`;
+      btn.disabled=false; btn.textContent='Guardar cliente';
+    });
+}
+
+function cargarCuentasBackground() {
+  fetch(CUENTAS_URL + '&t=' + Date.now())
+    .then(r => r.text())
+    .then(text => {
+      const filas = parseCSV(text);
+      todasCuentas = filas.map(f => ({
+        nombre: f['nombre']||'',
+        plataforma: (f['plataforma']||'').toUpperCase(),
+        correo: f['correo']||'',
+        contrasena: f['contraseña']||f['contrasena']||'',
+        cuentaPago: f['cuenta_pago']||'',
+        slotsTotal: parseInt(f['slots_total']||'0'),
+        slots: [f['slot1']||'',f['slot2']||'',f['slot3']||'',f['slot4']||'',f['slot5']||''],
+        notas: f['notas']||'',
+      })).filter(c => c.nombre);
+    }).catch(() => {});
+}
+
+function cargarCuentas() {
+  document.getElementById('cuentas-content').innerHTML = '<div class="loading">Cargando cuentas...</div>';
+  fetch(CUENTAS_URL + '&t=' + Date.now())
+    .then(r => { if (!r.ok) throw new Error(); return r.text(); })
+    .then(text => {
+      const filas = parseCSV(text);
+      todasCuentas = filas.map(f => ({
+        nombre: f['nombre']||'',
+        plataforma: (f['plataforma']||'').toUpperCase(),
+        correo: f['correo']||'',
+        contrasena: f['contraseña']||f['contrasena']||'',
+        cuentaPago: f['cuenta_pago']||'',
+        slotsTotal: parseInt(f['slots_total']||'0'),
+        slots: [f['slot1']||'',f['slot2']||'',f['slot3']||'',f['slot4']||'',f['slot5']||''],
+        notas: f['notas']||'',
+      })).filter(c => c.nombre);
+      renderFiltrosPlat();
+      renderCuentas();
+    })
+    .catch(() => {
+      document.getElementById('cuentas-content').innerHTML = '<div class="error-msg">⚠️ No se pudieron cargar las cuentas.</div>';
+    });
+}
+
+function renderFiltrosPlat() {
+  const plats = ['TODAS', ...new Set(todasCuentas.map(c => c.plataforma))];
+  document.getElementById('filtros-plataforma').innerHTML = plats.map(p =>
+    `<button class="plat-filter${p===filtroPlatActual?' active':''}" onclick="setFiltroPlat('${p}',this)">${PLAT_ICONS[p]||'📦'} ${p}</button>`
+  ).join('');
+}
+
+function setFiltroPlat(plat, btn) {
+  filtroPlatActual = plat;
+  document.querySelectorAll('.plat-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCuentas();
+}
+
+function renderCuentas() {
+  let lista = todasCuentas;
+  if (filtroPlatActual !== 'TODAS') lista = lista.filter(c => c.plataforma === filtroPlatActual);
+  
+  if (!lista.length) {
+    document.getElementById('cuentas-content').innerHTML = '<div class="empty">No hay cuentas registradas</div>';
+    return;
+  }
+
+  const grupos = {};
+  lista.forEach(c => {
+    if (!grupos[c.plataforma]) grupos[c.plataforma] = [];
+    grupos[c.plataforma].push(c);
+  });
+
+  let html = '';
+  Object.keys(grupos).forEach(plat => {
+    html += `<div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin:16px 0 8px;">${PLAT_ICONS[plat]||'📦'} ${plat}</div>`;
+    grupos[plat].forEach((c, idx) => {
+      const ocupados = c.slots.filter(s => s && s !== 'x' && s !== 'X').length;
+      const bloqueados = c.slots.filter(s => s === 'x' || s === 'X').length;
+      const libres = c.slotsTotal - ocupados - bloqueados;
+      const slotsMini = c.slots.slice(0, c.slotsTotal).map(s => {
+        if (!s) return '<div class="slot-mini libre" title="Libre"></div>';
+        if (s==='x'||s==='X') return '<div class="slot-mini bloqueado" title="No disponible"></div>';
+        return '<div class="slot-mini ocupado" title="Ocupado"></div>';
+      }).join('');
+      const cardId = `cuenta-${plat}-${idx}`;
+      html += `<div class="cuenta-card">
+        <div class="cuenta-header" onclick="toggleCuenta('${cardId}')">
+          <div>
+            <div class="cuenta-plat">${c.nombre}</div>
+            <div class="cuenta-correo">${c.correo}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div style="text-align:right;">
+              <div style="font-size:11px;color:var(--green);font-weight:600;">${libres} libre${libres!==1?'s':''}</div>
+              <div style="font-size:11px;color:var(--text3);">${ocupados} ocupado${ocupados!==1?'s':''}</div>
+            </div>
+            <div class="cuenta-slots-summary">${slotsMini}</div>
+          </div>
+        </div>
+        <div class="cuenta-body" id="${cardId}">
+          <div class="cuenta-info">
+            <div class="cuenta-info-item">
+              <div class="cuenta-info-label">Contraseña</div>
+              <div class="cuenta-info-value" id="pass-${cardId}" style="filter:blur(4px);cursor:pointer;" onclick="togglePass('pass-${cardId}')">${c.contrasena||'—'}</div>
+            </div>
+            <div class="cuenta-info-item">
+              <div class="cuenta-info-label">Cuenta de pago</div>
+              <div class="cuenta-info-value">${c.cuentaPago||'—'}</div>
+            </div>
+          </div>
+          ${c.notas ? `<div style="background:var(--amber-bg);border-radius:8px;padding:8px 10px;font-size:12px;color:var(--amber);margin-bottom:12px;">📝 ${c.notas}</div>` : ''}
+          <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px;">Slots</div>
+          ${c.slots.slice(0, c.slotsTotal).map((s, i) => {
+            if (s === 'x' || s === 'X') return `<div class="slot-row"><div class="slot-num">Slot ${i+1}</div><div class="slot-cliente"><span class="slot-bloqueado-tag">No disponible</span></div></div>`;
+            if (!s) return `<div class="slot-row"><div class="slot-num">Slot ${i+1}</div><div class="slot-cliente"><span class="slot-libre-tag">✓ Libre</span></div></div>`;
+            const cliente = todosClientes.find(cl => cl.id === s);
+            const nombreCliente = cliente ? cliente.cliente : s;
+            return `<div class="slot-row">
+              <div class="slot-num">Slot ${i+1}</div>
+              <div class="slot-cliente">${nombreCliente}<div style="font-size:11px;color:var(--text3);">${s}</div></div>
+              <button class="slot-action" onclick="liberarSlot('${c.nombre}','${i}')">Liberar</button>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+    });
+  });
+  document.getElementById('cuentas-content').innerHTML = html;
+}
+
+function toggleCuenta(id) {
+  const body = document.getElementById(id);
+  body.classList.toggle('open');
+}
+
+function togglePass(id) {
+  const el = document.getElementById(id);
+  el.style.filter = el.style.filter ? '' : 'blur(4px)';
+}
+
+function liberarSlot(nombreCuenta, slotIdx) {
+  const cuenta = todasCuentas.find(c => c.nombre === nombreCuenta);
+  if (!cuenta) return;
+  const cliente = cuenta.slots[slotIdx];
+  if (!confirm(`¿Liberar slot ${parseInt(slotIdx)+1} de ${nombreCuenta}? (${cliente})`)) return;
+  fetch(SCRIPT_URL, {
+    method: 'POST',
+    body: JSON.stringify({accion: 'liberarSlot', nombreCuenta, slotIdx: parseInt(slotIdx)})
+  }).then(r => r.json())
+    .then(res => {
+      if (res.status === 'ok') { cargarCuentas(); }
+      else { alert('Error al liberar slot. Inténtalo de nuevo.'); }
+    }).catch(() => alert('Error de conexión.'));
+}
+
+function abrirModalNuevaCuenta() {
+  alert('Agregar cuenta nueva — próximamente disponible desde la app.');
+}
+
+function renderGanancias() {
+  const vendedores = ['ximenita','david','saito'];
+  const resumen = {};
+  vendedores.forEach(v=>resumen[v]={total:0,clientes:0});
+  let misGanancias=0, misClientes=0;
+  todosClientes.forEach(c=>{
+    const g=parseFloat(c.ganancia)||0;
+    const v=c.vendedor.toLowerCase();
+    if(v==='yo'){misGanancias+=g;misClientes++;}
+    else if(resumen[v]!==undefined){
+      const paqueteData = PAQUETES_GANANCIA[c.paquete];
+      const comision = paqueteData ? paqueteData.gananciaAmigo : 0;
+      resumen[v].total+=comision; resumen[v].clientes++;
+      misGanancias+=g; misClientes++;
+    }
+  });
+  const total=todosClientes.reduce((s,c)=>s+(parseFloat(c.precio)||0),0);
+  document.getElementById('ganancias-content').innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Ingresos totales</div>
+        <div style="font-size:28px;font-weight:700;color:var(--text);">$${total.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
+      </div>
+      <div style="background:var(--green-bg);border:1px solid #b8e0c8;border-radius:12px;padding:16px;">
+        <div style="font-size:11px;color:var(--green);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">Tu ganancia</div>
+        <div style="font-size:28px;font-weight:700;color:var(--green);">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
+        <div style="font-size:12px;color:var(--green);margin-top:4px;">${misClientes} ventas propias</div>
+      </div>
+    </div>
+    <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.04em;">Comisiones por vendedor</div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${vendedores.map(v=>`
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:14px;font-weight:600;text-transform:capitalize;">${v}</div>
+            <div style="font-size:12px;color:var(--text2);">${resumen[v].clientes} clientes</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:20px;font-weight:700;color:var(--amber);">$${resumen[v].total.toFixed(2)}</div>
+            <div style="font-size:11px;color:var(--text3);">pendiente de pago</div>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div style="margin-top:16px;padding:12px;background:var(--blue-bg);border-radius:10px;font-size:12px;color:var(--blue);">
+      💡 El acumulador de comisiones y registro de pagos estará disponible próximamente.
+    </div>`;
+}
+
+function renderConfig() {
+  const paquetes = Object.entries(PAQUETES_GANANCIA);
+  const vendedores = [
+    {nombre:'Ximenita', key:'ximenita'},
+    {nombre:'David Guzmán', key:'david'},
+    {nombre:'Saito', key:'saito'},
+  ];
+
+  document.getElementById('config-content').innerHTML=`
+    <div style="font-size:15px;font-weight:700;margin-bottom:16px;">⚙️ Configuración</div>
+
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;" id="config-tabs">
+      <button class="f-btn active" onclick="showConfigTab('paquetes',this)">📦 Combos y precios</button>
+      <button class="f-btn" onclick="showConfigTab('vendedores',this)">👥 Vendedores</button>
+      <button class="f-btn" onclick="showConfigTab('nueva-cuenta',this)">🔑 Nueva cuenta</button>
+    </div>
+
+    <div id="config-paquetes">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Edita precios y ganancias. Los cambios aplican a nuevos clientes.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;" id="lista-paquetes">
+        ${paquetes.map(([nombre, datos], i) => `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:8px;">${nombre}</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+              <div>
+                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:3px;">Precio público</div>
+                <input type="number" class="form-input" style="padding:6px 8px;font-size:13px;" 
+                  id="paq-precio-${i}" value="${datos.gananciaAmigo + datos.gananciaNeta}" 
+                  onchange="actualizarPaquete(${i},'${nombre}')">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:3px;">Gan. amigo</div>
+                <input type="number" class="form-input" style="padding:6px 8px;font-size:13px;"
+                  id="paq-amigo-${i}" value="${datos.gananciaAmigo}"
+                  onchange="actualizarPaquete(${i},'${nombre}')">
+              </div>
+              <div>
+                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:3px;">Tu ganancia</div>
+                <input type="number" class="form-input" style="padding:6px 8px;font-size:13px;"
+                  id="paq-neta-${i}" value="${datos.gananciaNeta}"
+                  onchange="actualizarPaquete(${i},'${nombre}')">
+              </div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>
+
+    <div id="config-vendedores" style="display:none;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Ajusta el porcentaje de comisión de cada vendedor.</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${vendedores.map(v => `
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;">
+            <div>
+              <div style="font-size:14px;font-weight:600;">${v.nombre}</div>
+              <div style="font-size:12px;color:var(--text2);">Se lleva el % de Ganancia Amigo</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input type="number" class="form-input" style="width:70px;padding:6px 8px;text-align:center;" 
+                id="vend-${v.key}" value="100" min="0" max="100">
+              <span style="font-size:13px;color:var(--text2);">%</span>
+            </div>
+          </div>`).join('')}
+      </div>
+      <div style="margin-top:12px;padding:10px 14px;background:var(--blue-bg);border-radius:8px;font-size:12px;color:var(--blue);">
+        💡 100% significa que el vendedor se lleva toda la Ganancia Amigo. 50% significa que se dividen.
+      </div>
+    </div>
+
+    <div id="config-nueva-cuenta" style="display:none;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Agrega una nueva cuenta de streaming.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div class="form-group">
+          <label class="form-label">Nombre</label>
+          <input class="form-input" id="nc-nombre" placeholder="Ej. Netflix E">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Plataforma</label>
+            <select class="form-select" id="nc-plataforma">
+              <option>NETFLIX</option>
+              <option>SPOTIFY</option>
+              <option>YOUTUBE PREM</option>
+              <option>DISNEY</option>
+              <option>HBO</option>
+              <option>PARAMOUNT</option>
+              <option>CRUNCHYROLL</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Slots totales</label>
+            <input class="form-input" type="number" id="nc-slots" value="4" min="1" max="6">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Correo</label>
+            <input class="form-input" id="nc-correo" placeholder="correo@mozmail.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contraseña</label>
+            <input class="form-input" id="nc-pass" placeholder="contraseña">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cuenta de pago</label>
+          <input class="form-input" id="nc-pago" placeholder="Ej. cmichis@gmail.com (Google Play)">
+        </div>
+        <button class="btn-primary" onclick="guardarNuevaCuenta()">Guardar cuenta</button>
+        <div id="nc-status"></div>
+      </div>
+    </div>`;
+}
+
+function showConfigTab(tab, btn) {
+  document.querySelectorAll('#config-paquetes,#config-vendedores,#config-nueva-cuenta').forEach(el => el.style.display='none');
+  document.getElementById('config-'+tab).style.display='block';
+  document.querySelectorAll('#config-tabs .f-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function actualizarPaquete(idx, nombre) {
+  const precio = parseFloat(document.getElementById('paq-precio-'+idx).value)||0;
+  const amigo = parseFloat(document.getElementById('paq-amigo-'+idx).value)||0;
+  const neta = parseFloat(document.getElementById('paq-neta-'+idx).value)||0;
+  if (PAQUETES_GANANCIA[nombre]) {
+    PAQUETES_GANANCIA[nombre].gananciaAmigo = amigo;
+    PAQUETES_GANANCIA[nombre].gananciaNeta = neta;
+  }
+}
+
+function guardarNuevaCuenta() {
+  const nombre = document.getElementById('nc-nombre').value.trim();
+  const plataforma = document.getElementById('nc-plataforma').value;
+  const correo = document.getElementById('nc-correo').value.trim();
+  const pass = document.getElementById('nc-pass').value.trim();
+  const slots = document.getElementById('nc-slots').value;
+  const pago = document.getElementById('nc-pago').value.trim();
+  const status = document.getElementById('nc-status');
+
+  if (!nombre || !correo) {
+    status.innerHTML = '<div class="error-msg">⚠️ Nombre y correo son obligatorios.</div>';
+    return;
+  }
+
+  const datos = {
+    accion: 'nuevaCuenta',
+    nombre, plataforma, correo, contrasena: pass,
+    slots_total: slots, cuenta_pago: pago
+  };
+
+  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify(datos)})
+    .then(r => r.json())
+    .then(res => {
+      if (res.status === 'ok') {
+        status.innerHTML = '<div class="success-box"><p>✅ Cuenta guardada correctamente</p></div>';
+        document.getElementById('nc-nombre').value='';
+        document.getElementById('nc-correo').value='';
+        document.getElementById('nc-pass').value='';
+        document.getElementById('nc-pago').value='';
+        cargarCuentasBackground();
+      } else throw new Error(res.message);
+    })
+    .catch(() => {
+      status.innerHTML = '<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>';
+    });
+}
+
+function abrirEditar(id) {
+  const c = todosClientes.find(x => x.id === id);
+  if (!c) return;
+  cerrarModal('modal-detalle');
+  document.getElementById('e-id').value = c.id;
+  document.getElementById('e-cliente').value = c.cliente;
+  document.getElementById('e-contacto').value = c.contacto;
+  document.getElementById('e-cuenta').value = c.cuenta;
+  document.getElementById('e-vendedor').value = c.vendedor;
+  document.getElementById('e-pago').value = c.pago || 'PAGADO';
+  document.getElementById('e-estado').value = c.estado_raw || 'ACTIVO';
+  document.getElementById('e-notas').value = c.notas || '';
+  document.getElementById('e-renovacion').value = c.renovacion;
+  if (c.inicio) {
+    const p = c.inicio.split('/');
+    if (p.length === 3) document.getElementById('e-inicio').value = `${p[2]}-${p[1]}-${p[0]}`;
+  }
+  const paqueteOpt = [...document.getElementById('e-paquete').options].find(o => o.value.startsWith(c.paquete+'|'));
+  if (paqueteOpt) {
+    document.getElementById('e-paquete').value = paqueteOpt.value;
+    document.getElementById('e-precio').value = '$' + paqueteOpt.value.split('|')[1];
+  } else {
+    document.getElementById('e-paquete').value = '';
+    document.getElementById('e-precio').value = c.precio ? '$'+c.precio : '';
+  }
+  document.getElementById('editar-status').innerHTML = '';
+  document.getElementById('btn-editar').disabled = false;
+  document.getElementById('btn-editar').textContent = 'Guardar cambios';
+  document.getElementById('modal-editar').classList.add('open');
+}
+
+function actualizarPrecioEditar() {
+  const sel = document.getElementById('e-paquete').value;
+  if (!sel) { document.getElementById('e-precio').value = ''; return; }
+  document.getElementById('e-precio').value = '$' + sel.split('|')[1];
+}
+
+function calcularRenovacionEditar() {
+  const inicio = document.getElementById('e-inicio').value;
+  if (!inicio) return;
+  const d = new Date(inicio); d.setDate(d.getDate() + 30);
+  document.getElementById('e-renovacion').value = String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+
+function guardarEdicion() {
+  const id = document.getElementById('e-id').value;
+  const sel = document.getElementById('e-paquete').value;
+  const datos = {
+    accion: 'editarCliente',
+    id,
+    cliente: document.getElementById('e-cliente').value.trim(),
+    contacto: document.getElementById('e-contacto').value.trim(),
+    paquete: sel ? sel.split('|')[0] : '',
+    precio: sel ? sel.split('|')[1] : document.getElementById('e-precio').value.replace('$',''),
+    cuenta: document.getElementById('e-cuenta').value.trim(),
+    inicio: document.getElementById('e-inicio').value ? new Date(document.getElementById('e-inicio').value).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}) : '',
+    renovacion: document.getElementById('e-renovacion').value,
+    vendedor: document.getElementById('e-vendedor').value,
+    pago: document.getElementById('e-pago').value,
+    estado: document.getElementById('e-estado').value,
+    notas: document.getElementById('e-notas').value.trim(),
+  };
+  const btn = document.getElementById('btn-editar');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify(datos)})
+    .then(r => r.json())
+    .then(res => {
+      if (res.status === 'ok') {
+        document.getElementById('editar-status').innerHTML = '<div class="success-box"><p>✅ Cambios guardados</p></div>';
+        btn.textContent = 'Guardado ✓';
+        setTimeout(() => { cerrarModal('modal-editar'); cargarDatos(); }, 1200);
+      } else throw new Error(res.message);
+    })
+    .catch(err => {
+      document.getElementById('editar-status').innerHTML = `<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>`;
+      btn.disabled = false; btn.textContent = 'Guardar cambios';
+    });
+}
+
+function reactivarCliente(id) {
+  const c = todosClientes.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`¿Reactivar a ${c.cliente}?`)) return;
+  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify({accion:'editarCliente', id, estado:'ACTIVO', cliente:c.cliente, contacto:c.contacto, paquete:c.paquete, precio:c.precio, cuenta:c.cuenta, inicio:c.inicio, renovacion:c.renovacion, vendedor:c.vendedor, pago:c.pago, notas:c.notas||''})})
+    .then(r => r.json())
+    .then(res => {
+      if (res.status==='ok') {
+        // Actualizar localmente sin esperar el CSV
+        setEstadoLocal(id, 'ACTIVO');
+        const idx = todosClientes.findIndex(x => x.id === id);
+        if (idx >= 0) todosClientes[idx].estado_raw = 'ACTIVO';
+        cerrarModal('modal-detalle');
+        actualizarMetricas();
+        filtrar();
+      }
+    })
+    .catch(() => alert('Error al reactivar.'));
+}
+
+function confirmarArchivar(id) {
+  const c = todosClientes.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`¿Archivar a ${c.cliente}?\nSe liberarán sus slots en todas las cuentas automáticamente.`)) return;
+  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify({accion:'archivarCliente', id})})
+    .then(r => r.json())
+    .then(res => {
+      if (res.status==='ok') {
+        // Actualizar localmente sin esperar el CSV
+        setEstadoLocal(id, 'ARCHIVADO');
+        const idx = todosClientes.findIndex(x => x.id === id);
+        if (idx >= 0) todosClientes[idx].estado_raw = 'ARCHIVADO';
+        cerrarModal('modal-detalle');
+        actualizarMetricas();
+        filtrar();
+        cargarCuentasBackground();
+      } else { alert('Error al archivar: ' + (res.message||'')); }
+    })
+    .catch(() => alert('Error de conexión al archivar.'));
+}
+
+document.querySelectorAll('.modal-overlay').forEach(m=>{
+  m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});
+});
+
+cargarDatos();
+cargarCuentasBackground();
+</script>
+</body>
+</html>
