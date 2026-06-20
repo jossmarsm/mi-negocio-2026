@@ -531,6 +531,7 @@ body {
 <div class="nav-tabs" id="nav-tabs">
   <div class="nav-tab active" onclick="mostrarSeccion('clientes', this)">👥 Clientes</div>
   <div class="nav-tab" onclick="mostrarSeccion('cuentas', this)">🔑 Cuentas</div>
+  <div class="nav-tab" onclick="mostrarSeccion('catalogo', this)">📦 Catálogo</div>
   <div class="nav-tab" onclick="mostrarSeccion('ganancias', this)">📊 Ganancias</div>
   <div class="nav-tab" id="tab-config" onclick="mostrarSeccion('config', this)">⚙️ Configuración</div>
 </div>
@@ -574,6 +575,17 @@ body {
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;" id="filtros-plataforma"></div>
     <div id="cuentas-content"><div class="loading">Cargando cuentas...</div></div>
+  </div>
+</div>
+
+<!-- SECCIÓN CATÁLOGO (visible para todos: admin y vendedores) -->
+<div id="sec-catalogo" class="section-hidden">
+  <div class="content" style="padding-top:20px;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk';">Catálogo y comisiones</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-top:3px;" id="catalogo-sub">Precios actualizados y lo que te toca por cada venta</div>
+    </div>
+    <div id="catalogo-content"><div class="loading">Cargando catálogo...</div></div>
   </div>
 </div>
 
@@ -658,7 +670,6 @@ body {
         <select class="form-select" id="n-vendedor" onchange="calcularGanancia()">
           <option value="YO">YO</option>
           <option value="ximenita">Xime</option>
-          <option value="david">David Guzmán</option>
           <option value="saito">Saito</option>
         </select>
       </div>
@@ -732,7 +743,6 @@ body {
         <select class="form-select" id="e-vendedor">
           <option value="YO">YO</option>
           <option value="ximenita">Xime</option>
-          <option value="david">David Guzmán</option>
           <option value="saito">Saito</option>
         </select>
       </div>
@@ -807,7 +817,6 @@ body {
       <label class="form-label">Vendedor</label>
       <select class="form-select" id="vu-vendedor">
         <option value="ximenita">Xime</option>
-        <option value="david">David Guzmán</option>
         <option value="saito">Saito</option>
       </select>
     </div>
@@ -878,7 +887,7 @@ const COLORES = [
   {bg:'#332512',color:'#fcd34d'},{bg:'#341a26',color:'#f9a8d4'},
 ];
 
-const COMISIONES_DEFAULT = { ximenita:100, david:100, saito:100 };
+const COMISIONES_DEFAULT = { ximenita:100, saito:100 };
 let COMISIONES = JSON.parse(JSON.stringify(COMISIONES_DEFAULT));
 
 const PAQUETES_GANANCIA_DEFAULT = {
@@ -1008,6 +1017,7 @@ function mostrarSeccion(sec, btn) {
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if (sec==='cuentas') cargarCuentas();
+  if (sec==='catalogo') cargarCatalogo();
   if (sec==='ganancias') { Promise.all([cargarPagos(), cargarVentasUnicas()]).then(renderGanancias); }
   if (sec==='config') renderConfig();
 }
@@ -1446,6 +1456,72 @@ function cargarCuentasDisponibles(paquete) {
   container.innerHTML = html;
 }
 
+// ===== Catálogo (visible para admin y vendedores) =====
+// Admin ve: precio, ganancia amigo genérica, su propia ganancia neta.
+// Vendedor ve: precio, SU comisión ya calculada con su % personal, y
+// disponibilidad de slots — nunca correos/contraseñas, eso es solo admin.
+function cargarCatalogo() {
+  const sub = document.getElementById('catalogo-sub');
+  if (MI_ROL === 'admin') {
+    sub.textContent = 'Precios, ganancia amigo y disponibilidad — lo que ven tus vendedores';
+  } else {
+    sub.textContent = 'Precio de venta y lo que te toca a ti por cada combo';
+  }
+  // Aseguramos tener cuentas cargadas para calcular disponibilidad.
+  if (!todasCuentas.length) {
+    cargarCuentasBackground();
+    setTimeout(renderCatalogo, 700);
+  } else {
+    renderCatalogo();
+  }
+}
+
+function disponibilidadCombo(nombrePaquete) {
+  const plataformas = detectarPlataformas(nombrePaquete);
+  let totalLibres = 0;
+  plataformas.forEach(plat => {
+    todasCuentas.filter(c => c.plataforma === plat).forEach(cuenta => {
+      totalLibres += cuenta.slots.slice(0, cuenta.slotsTotal).filter(s => !s || s.trim()==='').length;
+    });
+  });
+  return totalLibres;
+}
+
+function renderCatalogo() {
+  const cont = document.getElementById('catalogo-content');
+  const combos = Object.entries(PAQUETES_GANANCIA);
+  if (!combos.length) {
+    cont.innerHTML = `<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Sin combos cargados</div></div>`;
+    return;
+  }
+
+  const esAdmin = MI_ROL === 'admin';
+  const miPct = esAdmin ? 100 : (COMISIONES[MI_VENDEDOR] !== undefined ? COMISIONES[MI_VENDEDOR] : 100);
+
+  cont.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">` + combos.map(([nombre, d]) => {
+    const libres = disponibilidadCombo(nombre);
+    const sinStock = libres <= 0;
+    const miGanancia = esAdmin ? d.gananciaNeta : (d.gananciaAmigo * (miPct/100));
+    return `<div class="cuenta-card" style="padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">
+        <div style="font-size:13.5px;font-weight:700;flex:1;">${nombre}</div>
+        <div style="font-family:'Space Grotesk';font-size:16px;font-weight:700;color:var(--text);white-space:nowrap;">$${d.precio}</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div class="cuenta-info-item">
+          <div class="cuenta-info-label">${esAdmin ? 'Tu ganancia neta' : 'Tu comisión'}</div>
+          <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:var(--green);">$${miGanancia.toFixed(2)}</div>
+        </div>
+        <div class="cuenta-info-item">
+          <div class="cuenta-info-label">Disponibilidad</div>
+          <div style="font-size:12.5px;font-weight:600;color:${sinStock?'var(--red)':'var(--green)'};margin-top:2px;">${sinStock ? 'Sin slots libres' : libres+' slot'+(libres!==1?'s':'')+' libre'+(libres!==1?'s':'')}</div>
+        </div>
+      </div>
+      ${esAdmin ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;">Ganancia amigo (vendedores): $${d.gananciaAmigo}</div>` : ''}
+    </div>`;
+  }).join('') + `</div>`;
+}
+
 function detectarPlataformas(paquete) {
   const p = paquete.toLowerCase();
   const plats = [];
@@ -1763,7 +1839,7 @@ function abrirModalNuevaCuenta() {
 }
 
 function renderGanancias() {
-  const vendedores = MI_ROL==='admin' ? ['ximenita','david','saito'] : [MI_VENDEDOR];
+  const vendedores = MI_ROL==='admin' ? ['ximenita','saito'] : [MI_VENDEDOR];
   const resumen = {};
   vendedores.forEach(v=>resumen[v]={total:0,clientes:0,caidos:0,ventasUnicas:0});
   let misGanancias=0, misClientes=0;
@@ -2040,7 +2116,6 @@ function renderConfig() {
   const paquetes = Object.entries(PAQUETES_GANANCIA);
   const vendedores = [
     {nombre:'Xime', key:'ximenita'},
-    {nombre:'David Guzmán', key:'david'},
     {nombre:'Saito', key:'saito'},
   ];
 
