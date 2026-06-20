@@ -431,6 +431,27 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   </div>
 </div>
 
+<!-- MODAL REGISTRAR PAGO -->
+<div class="modal-overlay" id="modal-pago">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header">
+      <div class="modal-title" id="pago-titulo">Registrar pago</div>
+      <button class="modal-close" onclick="cerrarModal('modal-pago')">✕</button>
+    </div>
+    <div id="pago-status"></div>
+    <div class="form-group">
+      <label class="form-label">Monto a pagar</label>
+      <input class="form-input" type="number" id="pago-monto" placeholder="0">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nota (opcional)</label>
+      <input class="form-input" id="pago-notas" placeholder="Ej. transferencia, efectivo...">
+    </div>
+    <input type="hidden" id="pago-vendedor">
+    <button class="btn-primary" id="btn-pago" onclick="guardarPago()">Registrar pago</button>
+  </div>
+</div>
+
 <script>
 const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRTbuyYy6v3pCi39iSTs9ISef7OacyzS4i1_-qLLdmfCGmgeWeyQ0q177VOJGxsPX5IpaQjTLq_ipui/pub?gid=0&single=true&output=csv';
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw_r9t-i8Y0Mv6U78gVOg1eOYVy7r40qjQXXU8kicBaiot3c-S9Q6zF6-33b1FxgLqN0A/exec';
@@ -542,7 +563,7 @@ function mostrarSeccion(sec, btn) {
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if (sec==='cuentas') cargarCuentas();
-  if (sec==='ganancias') renderGanancias();
+  if (sec==='ganancias') { cargarPagos().then(renderGanancias); }
   if (sec==='config') renderConfig();
 }
 
@@ -1012,6 +1033,12 @@ function renderGanancias() {
       misGanancias+=g; misClientes++;
     }
   });
+  const pagado={};
+  vendedores.forEach(v=>pagado[v]=0);
+  todosPagos.forEach(p=>{
+    const v=(p.vendedor||'').toLowerCase();
+    if(pagado[v]!==undefined) pagado[v]+=parseFloat(p.monto)||0;
+  });
   const total=todosClientes.reduce((s,c)=>s+(parseFloat(c.precio)||0),0);
   document.getElementById('ganancias-content').innerHTML=`
     <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">
@@ -1027,21 +1054,75 @@ function renderGanancias() {
     </div>
     <div style="font-size:13px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.04em;">Comisiones por vendedor</div>
     <div style="display:flex;flex-direction:column;gap:8px;">
-      ${vendedores.map(v=>`
-        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;">
-          <div>
-            <div style="font-size:14px;font-weight:600;text-transform:capitalize;">${v}</div>
-            <div style="font-size:12px;color:var(--text2);">${resumen[v].clientes} clientes</div>
+      ${vendedores.map(v=>{
+        const acum=resumen[v].total;
+        const pag=pagado[v];
+        const pend=acum-pag;
+        return `
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div>
+              <div style="font-size:14px;font-weight:600;text-transform:capitalize;">${v}</div>
+              <div style="font-size:12px;color:var(--text2);">${resumen[v].clientes} clientes</div>
+            </div>
+            <button onclick="abrirModalPago('${v}',${pend.toFixed(2)})" style="padding:7px 12px;border-radius:8px;background:var(--accent);color:#fff;border:none;font-size:12px;font-weight:600;cursor:pointer;">Registrar pago</button>
           </div>
-          <div style="text-align:right;">
-            <div style="font-size:20px;font-weight:700;color:var(--amber);">$${resumen[v].total.toFixed(2)}</div>
-            <div style="font-size:11px;color:var(--text3);">pendiente de pago</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+            <div style="background:var(--bg);border-radius:8px;padding:8px 10px;">
+              <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;">Acumulado</div>
+              <div style="font-size:15px;font-weight:700;color:var(--text);">$${acum.toFixed(2)}</div>
+            </div>
+            <div style="background:var(--bg);border-radius:8px;padding:8px 10px;">
+              <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;">Pagado</div>
+              <div style="font-size:15px;font-weight:700;color:var(--green);">$${pag.toFixed(2)}</div>
+            </div>
+            <div style="background:var(--bg);border-radius:8px;padding:8px 10px;">
+              <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;">Pendiente</div>
+              <div style="font-size:15px;font-weight:700;color:${pend>0.001?'var(--amber)':'var(--green)'};">$${pend.toFixed(2)}</div>
+            </div>
           </div>
-        </div>`).join('')}
-    </div>
-    <div style="margin-top:16px;padding:12px;background:var(--blue-bg);border-radius:10px;font-size:12px;color:var(--blue);">
-      💡 El acumulador de comisiones y registro de pagos estará disponible próximamente.
+        </div>`;
+      }).join('')}
     </div>`;
+}
+
+function cargarPagos() {
+  return fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'pagos',key:APP_KEY})})
+    .then(r=>r.json())
+    .then(res=>{ todosPagos = res.rows||[]; })
+    .catch(()=>{ todosPagos = []; });
+}
+
+function abrirModalPago(vendedor, pendiente) {
+  document.getElementById('pago-vendedor').value = vendedor;
+  document.getElementById('pago-titulo').textContent = 'Pagar a ' + vendedor;
+  document.getElementById('pago-monto').value = pendiente>0 ? pendiente : '';
+  document.getElementById('pago-notas').value = '';
+  document.getElementById('pago-status').innerHTML = '';
+  document.getElementById('btn-pago').disabled = false;
+  document.getElementById('btn-pago').textContent = 'Registrar pago';
+  document.getElementById('modal-pago').classList.add('open');
+}
+
+function guardarPago() {
+  const vendedor = document.getElementById('pago-vendedor').value;
+  const monto = parseFloat(document.getElementById('pago-monto').value)||0;
+  const notas = document.getElementById('pago-notas').value.trim();
+  const status = document.getElementById('pago-status');
+  if (monto <= 0) { status.innerHTML = '<div class="error-msg">⚠️ Pon un monto válido.</div>'; return; }
+  const btn = document.getElementById('btn-pago');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  const hoy = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'registrarPago',key:APP_KEY,fecha:hoy,vendedor:vendedor,concepto:'Pago de comisiones',monto:monto,tipo:'comision',notas:notas})})
+    .then(r=>r.json())
+    .then(res=>{
+      if(res.status==='ok'){
+        status.innerHTML = '<div class="success-box"><p>✅ Pago registrado</p></div>';
+        cargarPagos().then(()=>{ renderGanancias(); });
+        setTimeout(()=>cerrarModal('modal-pago'), 1200);
+      } else throw new Error(res.message);
+    })
+    .catch(()=>{ status.innerHTML='<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>'; btn.disabled=false; btn.textContent='Registrar pago'; });
 }
 
 function renderConfig() {
