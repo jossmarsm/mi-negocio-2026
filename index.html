@@ -118,9 +118,25 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   .form-row { grid-template-columns: 1fr; }
   .detalle-grid { grid-template-columns: 1fr; }
 }
+.login-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 500; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.login-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px; width: 100%; max-width: 360px; }
+.login-card h2 { font-size: 18px; margin-bottom: 6px; }
+.login-card p { font-size: 13px; color: var(--text2); margin-bottom: 18px; }
+.login-error { color: var(--red); font-size: 13px; margin-top: 10px; display: none; }
 </style>
 </head>
 <body>
+
+<div class="login-overlay" id="login-overlay">
+  <div class="login-card">
+    <div class="topbar-icon" style="margin-bottom:14px;">M</div>
+    <h2>Mi Negocio 2026</h2>
+    <p>Ingresa tu clave de acceso para continuar.</p>
+    <input class="form-input" type="password" id="login-pass" placeholder="Clave de acceso" onkeydown="if(event.key==='Enter')hacerLogin()">
+    <button class="btn-primary" id="login-btn" onclick="hacerLogin()">Entrar</button>
+    <div class="login-error" id="login-error">Clave incorrecta. Intenta de nuevo.</div>
+  </div>
+</div>
 
 <div class="topbar">
   <div class="topbar-brand">
@@ -422,6 +438,7 @@ const CUENTAS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRTbuyYy6v3
 const PAGOS_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRTbuyYy6v3pCi39iSTs9ISef7OacyzS4i1_-qLLdmfCGmgeWeyQ0q177VOJGxsPX5IpaQjTLq_ipui/pub?gid=2014189315&single=true&output=csv';
 
 let todosPagos = [];
+let APP_KEY = '';
 
 let todasCuentas = [];
 let filtroPlatActual = 'TODAS';
@@ -546,10 +563,10 @@ function setEstadoLocal(id, estado) {
 
 function cargarDatos() {
   document.getElementById('lista').innerHTML = '<div class="loading">Actualizando...</div>';
-  fetch(CSV_URL+'&t='+Date.now())
-    .then(r=>{if(!r.ok)throw new Error();return r.text();})
-    .then(text=>{
-      const filas = parseCSV(text);
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'clientes',key:APP_KEY})})
+    .then(r=>{if(!r.ok)throw new Error();return r.json();})
+    .then(res=>{
+      const filas = res.rows||[];
       todosClientes = filas.map(f=>{
         const renovacion = f['renovacion']||f['renovación']||'';
         const dias = diasRestantes(renovacion);
@@ -822,10 +839,10 @@ function guardarCliente() {
 }
 
 function cargarCuentasBackground() {
-  fetch(CUENTAS_URL + '&t=' + Date.now())
-    .then(r => r.text())
-    .then(text => {
-      const filas = parseCSV(text);
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'cuentas',key:APP_KEY})})
+    .then(r => r.json())
+    .then(res => {
+      const filas = res.rows||[];
       todasCuentas = filas.map(f => ({
         nombre: f['nombre']||'',
         plataforma: (f['plataforma']||'').toUpperCase(),
@@ -841,10 +858,10 @@ function cargarCuentasBackground() {
 
 function cargarCuentas() {
   document.getElementById('cuentas-content').innerHTML = '<div class="loading">Cargando cuentas...</div>';
-  fetch(CUENTAS_URL + '&t=' + Date.now())
-    .then(r => { if (!r.ok) throw new Error(); return r.text(); })
-    .then(text => {
-      const filas = parseCSV(text);
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'cuentas',key:APP_KEY})})
+    .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+    .then(res => {
+      const filas = res.rows||[];
       todasCuentas = filas.map(f => ({
         nombre: f['nombre']||'',
         plataforma: (f['plataforma']||'').toUpperCase(),
@@ -1318,8 +1335,56 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{
   m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});
 });
 
-cargarDatos();
-cargarCuentasBackground();
+function hacerLogin() {
+  const pass = document.getElementById('login-pass').value.trim();
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-error');
+  if (!pass) return;
+  btn.disabled = true; btn.textContent = 'Verificando...';
+  err.style.display = 'none';
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'clientes',key:pass})})
+    .then(r=>r.json())
+    .then(res=>{
+      if(res.status==='ok'){
+        APP_KEY = pass;
+        try { localStorage.setItem('app_key', pass); } catch(e){}
+        document.getElementById('login-overlay').style.display='none';
+        cargarDatos();
+        cargarCuentasBackground();
+      } else {
+        err.textContent = 'Clave incorrecta. Intenta de nuevo.';
+        err.style.display='block';
+        btn.disabled=false; btn.textContent='Entrar';
+      }
+    })
+    .catch(()=>{
+      err.textContent='Error de conexión. Intenta de nuevo.';
+      err.style.display='block';
+      btn.disabled=false; btn.textContent='Entrar';
+    });
+}
+
+function cerrarSesion() {
+  try { localStorage.removeItem('app_key'); } catch(e){}
+  location.reload();
+}
+
+// Auto-login si ya hay clave guardada en este dispositivo
+(function(){
+  let saved = '';
+  try { saved = localStorage.getItem('app_key')||''; } catch(e){}
+  if (!saved) return;
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'clientes',key:saved})})
+    .then(r=>r.json())
+    .then(res=>{
+      if(res.status==='ok'){
+        APP_KEY = saved;
+        document.getElementById('login-overlay').style.display='none';
+        cargarDatos();
+        cargarCuentasBackground();
+      }
+    }).catch(()=>{});
+})();
 </script>
 </body>
 </html>
