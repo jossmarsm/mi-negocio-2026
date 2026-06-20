@@ -543,7 +543,16 @@ body {
 <!-- SECCIÓN GANANCIAS -->
 <div id="sec-ganancias" class="section-hidden">
   <div class="content" style="padding-top:20px;">
-    <div id="ganancias-content"><div class="loading">Cargando ganancias...</div></div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;" id="ganancias-tabs">
+      <button class="f-btn active" onclick="showGananciasTab('resumen',this)">📊 Resumen</button>
+      <button class="f-btn" id="tab-historial-mensual" onclick="showGananciasTab('historial',this)" style="display:none;">📅 Historial mensual</button>
+    </div>
+    <div id="ganancias-resumen">
+      <div id="ganancias-content"><div class="loading">Cargando ganancias...</div></div>
+    </div>
+    <div id="ganancias-historial" style="display:none;">
+      <div id="historial-mensual-content"><div class="loading">Cargando historial...</div></div>
+    </div>
   </div>
 </div>
 
@@ -963,6 +972,93 @@ function mostrarSeccion(sec, btn) {
   if (sec==='cuentas') cargarCuentas();
   if (sec==='ganancias') { Promise.all([cargarPagos(), cargarVentasUnicas()]).then(renderGanancias); }
   if (sec==='config') renderConfig();
+}
+
+function showGananciasTab(tab, btn) {
+  document.getElementById('ganancias-resumen').style.display = tab==='resumen' ? 'block' : 'none';
+  document.getElementById('ganancias-historial').style.display = tab==='historial' ? 'block' : 'none';
+  document.querySelectorAll('#ganancias-tabs .f-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (tab==='historial' && !todosCortesMensuales.length) cargarHistorialMensual();
+}
+
+let todosCortesMensuales = [];
+
+function cargarHistorialMensual() {
+  document.getElementById('historial-mensual-content').innerHTML = '<div class="loading">Cargando historial...</div>';
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'cortes_mensuales',key:APP_KEY})})
+    .then(r=>r.json())
+    .then(res=>{
+      todosCortesMensuales = res.rows||[];
+      renderHistorialMensual();
+    })
+    .catch(()=>{
+      document.getElementById('historial-mensual-content').innerHTML = '<div class="error-msg">⚠️ No se pudo cargar el historial mensual.</div>';
+    });
+}
+
+function renderHistorialMensual() {
+  const cont = document.getElementById('historial-mensual-content');
+  if (!todosCortesMensuales.length) {
+    cont.innerHTML = '<div class="empty">Todavía no hay cortes mensuales registrados.<br><span style="font-size:12px;">El primero se genera automáticamente el día 1 del próximo mes.</span></div>';
+    return;
+  }
+  // Agrupar por mes
+  const porMes = {};
+  todosCortesMensuales.forEach(c => {
+    const mes = c['mes']||'';
+    if (!porMes[mes]) porMes[mes] = [];
+    porMes[mes].push(c);
+  });
+  // Meses más recientes primero
+  const meses = Object.keys(porMes).sort().reverse();
+
+  const nombresMes = {1:'Enero',2:'Febrero',3:'Marzo',4:'Abril',5:'Mayo',6:'Junio',7:'Julio',8:'Agosto',9:'Septiembre',10:'Octubre',11:'Noviembre',12:'Diciembre'};
+  function tituloMes(mesStr) {
+    const [y,m] = mesStr.split('-');
+    return (nombresMes[parseInt(m)]||mesStr) + ' ' + y;
+  }
+  const nombreVendedor = v => v==='ximenita' ? 'Xime' : v.charAt(0).toUpperCase()+v.slice(1);
+
+  cont.innerHTML = meses.map((mes, i) => {
+    const filas = porMes[mes];
+    const totalGenerado = filas.reduce((s,f)=>s+(parseFloat(f['generado_mes'])||0),0);
+    const totalPagado = filas.reduce((s,f)=>s+(parseFloat(f['pagado_mes'])||0),0);
+    const totalPendiente = filas.reduce((s,f)=>s+(parseFloat(f['pendiente_acumulado'])||0),0);
+    const bodyId = 'corte-mes-'+mes;
+    return `<div class="cuenta-card" style="animation-delay:${Math.min(i*0.04,0.3)}s;">
+      <div class="cuenta-header" onclick="toggleCuenta('${bodyId}')">
+        <div>
+          <div class="cuenta-plat" style="text-transform:capitalize;">${tituloMes(mes)}</div>
+          <div class="cuenta-correo">Generado: $${totalGenerado.toFixed(2)} · Pagado: $${totalPagado.toFixed(2)}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:11px;color:${totalPendiente>0.001?'var(--amber)':'var(--green)'};font-weight:700;">$${totalPendiente.toFixed(2)} pendiente</div>
+        </div>
+      </div>
+      <div class="cuenta-body" id="${bodyId}">
+        ${filas.map(f => `
+          <div class="vendor-stat-row" style="margin-bottom:10px;">
+            <div class="cuenta-info-item" style="grid-column:1/-1;margin-bottom:4px;">
+              <div class="cuenta-info-label" style="text-transform:capitalize;font-weight:700;color:var(--text);">${nombreVendedor(f['vendedor'])}</div>
+            </div>
+            <div class="cuenta-info-item">
+              <div class="cuenta-info-label">Generado</div>
+              <div style="font-family:'Space Grotesk';font-size:14px;font-weight:700;color:var(--text);">$${parseFloat(f['generado_mes']||0).toFixed(2)}</div>
+            </div>
+            <div class="cuenta-info-item">
+              <div class="cuenta-info-label">Pagado</div>
+              <div style="font-family:'Space Grotesk';font-size:14px;font-weight:700;color:var(--green);">$${parseFloat(f['pagado_mes']||0).toFixed(2)}</div>
+            </div>
+            <div class="cuenta-info-item">
+              <div class="cuenta-info-label">Pendiente acum.</div>
+              <div style="font-family:'Space Grotesk';font-size:14px;font-weight:700;color:${parseFloat(f['pendiente_acumulado']||0)>0.001?'var(--amber)':'var(--green)'};">$${parseFloat(f['pendiente_acumulado']||0).toFixed(2)}</div>
+            </div>
+          </div>`).join('')}
+        <div style="font-size:10.5px;color:var(--text3);margin-top:4px;">Corte generado: ${filas[0]['fecha_corte']||'—'}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function getEstadoLocal(id) {
@@ -1948,9 +2044,14 @@ function actualizarPaquete(idx, nombre) {
 // ===== PENDIENTE 4: % de comisión por vendedor =====
 function actualizarComision(vendedorKey) {
   const val = parseFloat(document.getElementById('vend-'+vendedorKey).value);
-  COMISIONES[vendedorKey] = isNaN(val) ? 100 : Math.max(0, Math.min(100, val));
+  const pct = isNaN(val) ? 100 : Math.max(0, Math.min(100, val));
+  COMISIONES[vendedorKey] = pct;
   guardarConfigLocal();
-  toast('Comisión de '+(vendedorKey==='ximenita'?'Xime':vendedorKey)+' actualizada a '+COMISIONES[vendedorKey]+'%');
+  toast('Comisión de '+(vendedorKey==='ximenita'?'Xime':vendedorKey)+' actualizada a '+pct+'%');
+  // Persistir en el backend (hoja config_comisiones) para que el corte
+  // mensual automático use el % correcto, no solo este navegador.
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'guardarComision',key:APP_KEY,vendedor:vendedorKey,porcentaje:pct})})
+    .catch(()=>{ toast('No se pudo sincronizar el % con el servidor', 'error'); });
 }
 
 function guardarConfigLocal() {
@@ -1966,6 +2067,29 @@ function cargarConfigLocal() {
     const p = localStorage.getItem('config_paquetes');
     if (p) PAQUETES_GANANCIA = {...PAQUETES_GANANCIA_DEFAULT, ...JSON.parse(p)};
   } catch(e) {}
+}
+
+// Trae el % de comisión real desde el Sheet (fuente de verdad) y
+// sobreescribe lo que haya en localStorage. Se llama al iniciar sesión,
+// así que si Joss cambió el % desde otro dispositivo, aquí se refleja.
+function sincronizarComisionesServidor() {
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'comisiones',key:APP_KEY})})
+    .then(r=>r.json())
+    .then(res=>{
+      const filas = res.rows||[];
+      if (!filas.length) return;
+      filas.forEach(f=>{
+        const v = (f['vendedor']||'').toLowerCase();
+        const pct = parseFloat(f['porcentaje']);
+        if (v && !isNaN(pct)) COMISIONES[v] = pct;
+      });
+      guardarConfigLocal();
+      // Si la pestaña de Ganancias o Configuración ya está abierta, refrescar
+      if (!document.getElementById('sec-ganancias').classList.contains('section-hidden')) {
+        Promise.all([cargarPagos(), cargarVentasUnicas()]).then(renderGanancias);
+      }
+    })
+    .catch(()=>{ /* si falla, nos quedamos con lo de localStorage */ });
 }
 
 // ===== PENDIENTE 2: Agregar combos nuevos desde Configuración =====
@@ -2176,6 +2300,9 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{
 function aplicarPermisosUI() {
   document.getElementById('user-nombre').textContent = MI_NOMBRE;
   document.getElementById('user-av').textContent = iniciales(MI_NOMBRE);
+  if (MI_ROL === 'admin') {
+    document.getElementById('tab-historial-mensual').style.display = 'inline-block';
+  }
   if (MI_ROL !== 'admin') {
     document.getElementById('tab-config').style.display = 'none';
     document.getElementById('f-vendedor').style.display = 'none';
@@ -2214,6 +2341,7 @@ function hacerLogin() {
         aplicarPermisosUI();
         cargarDatos();
         cargarCuentasBackground();
+        sincronizarComisionesServidor();
       } else {
         err.textContent = res.message || 'Usuario o clave incorrectos.';
         err.style.display='block';
@@ -2248,6 +2376,7 @@ function cerrarSesion() {
         aplicarPermisosUI();
         cargarDatos();
         cargarCuentasBackground();
+        sincronizarComisionesServidor();
       } else {
         try { localStorage.removeItem('app_key'); } catch(e){}
       }
