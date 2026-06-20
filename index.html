@@ -404,12 +404,6 @@ body {
 .login-card h2 { font-family: 'Space Grotesk'; font-size: 20px; margin-bottom: 6px; }
 .login-card p { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
 .login-error { color: var(--red); font-size: 13px; margin-top: 10px; display: none; animation: scaleIn 0.2s; }
-.user-select-row { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-.user-pill {
-  flex: 1; min-width: 80px; padding: 10px 8px; border-radius: var(--radius-sm); border: 1px solid var(--border);
-  background: var(--surface); text-align: center; cursor: pointer; transition: all 0.2s var(--ease); font-size: 12px; font-weight: 600; color: var(--text2);
-}
-.user-pill.active { border-color: var(--violet); background: var(--violet-bg); color: #fff; }
 </style>
 
 </style>
@@ -422,15 +416,17 @@ body {
   <div class="login-card">
     <div class="topbar-icon" style="margin-bottom:16px;width:40px;height:40px;font-size:18px;">M</div>
     <h2>Mi Negocio 2026</h2>
-    <p>¿Quién eres? Selecciona tu usuario e ingresa tu clave.</p>
-    <div class="user-select-row" id="user-select-row">
-      <div class="user-pill active" data-user="admin" onclick="seleccionarUsuario('admin', this)">Admin</div>
-      <div class="user-pill" data-user="ximenita" onclick="seleccionarUsuario('ximenita', this)">Xime</div>
-      <div class="user-pill" data-user="saito" onclick="seleccionarUsuario('saito', this)">Saito</div>
+    <p>Ingresa tu usuario y tu clave para continuar.</p>
+    <div class="form-group">
+      <label class="form-label">Usuario</label>
+      <input class="form-input" type="text" id="login-user" placeholder="Tu usuario" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
     </div>
-    <input class="form-input" type="password" id="login-pass" placeholder="Tu clave de acceso" onkeydown="if(event.key==='Enter')hacerLogin()">
+    <div class="form-group">
+      <label class="form-label">Clave</label>
+      <input class="form-input" type="password" id="login-pass" placeholder="Tu clave de acceso" autocomplete="current-password" onkeydown="if(event.key==='Enter')hacerLogin()">
+    </div>
     <button class="btn-primary" id="login-btn" onclick="hacerLogin()">Entrar</button>
-    <div class="login-error" id="login-error">Clave incorrecta. Intenta de nuevo.</div>
+    <div class="login-error" id="login-error">Usuario o clave incorrectos.</div>
   </div>
 </div>
 
@@ -492,7 +488,7 @@ body {
   <div class="content" style="padding-top:20px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk';">Cuentas</div>
-      <button onclick="abrirModalNuevaCuenta()" class="btn-primary" style="width:auto;margin-top:0;padding:9px 16px;font-size:13px;">+ Nueva cuenta</button>
+      <button id="btn-nueva-cuenta" onclick="abrirModalNuevaCuenta()" class="btn-primary" style="width:auto;margin-top:0;padding:9px 16px;font-size:13px;">+ Nueva cuenta</button>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;" id="filtros-plataforma"></div>
     <div id="cuentas-content"><div class="loading">Cargando cuentas...</div></div>
@@ -845,13 +841,33 @@ function toast(msg, tipo='success') {
   setTimeout(() => { el.style.opacity='0'; el.style.transition='opacity 0.3s'; setTimeout(()=>el.remove(),300); }, 2800);
 }
 
-// ===== WhatsApp =====
-function abrirWhatsApp(contacto, nombre, event) {
+// ===== WhatsApp con mensaje dinámico según estado del cliente =====
+function mensajeWhatsApp(c) {
+  const primerNombre = (c.cliente||'').trim().split(' ')[0] || 'amig@';
+  const paquete = c.paquete || 'tu servicio';
+
+  if (c.estado === 'vencido') {
+    const dias = Math.abs(c.dias);
+    return `Hola ${primerNombre} 👋 Vi que tu ${paquete} venció hace ${dias} día${dias!==1?'s':''}. ¿Seguimos con el servicio? Si quieres renovar, me dices y te lo dejo listo al toque 🎬`;
+  }
+  if (c.estado === 'proximo') {
+    if (c.dias === 0) {
+      return `Hola ${primerNombre} 👋 Tu ${paquete} vence hoy. ¿Renovamos para que no se interrumpa, o prefieres pausarlo por ahora? Tú dime 😊`;
+    }
+    return `Hola ${primerNombre}, ¿cómo estás? 😊 Te aviso que tu ${paquete} está por vencer en ${c.dias} día${c.dias!==1?'s':''}. ¿Quieres que te lo renueve o prefieres pausarlo por ahora? Tú dime`;
+  }
+  // activo o sin fecha
+  return `Hola ${primerNombre} 😊 Soy de Cuentas Streaming, ¿en qué te ayudo hoy?`;
+}
+
+function abrirWhatsApp(id, event) {
   if (event) event.stopPropagation();
-  if (!contacto) { toast('Este cliente no tiene teléfono guardado', 'error'); return; }
-  const limpio = contacto.replace(/\D/g,'');
+  const c = todosClientes.find(x => x.id === id);
+  if (!c) return;
+  if (!c.contacto) { toast('Este cliente no tiene teléfono guardado', 'error'); return; }
+  const limpio = c.contacto.replace(/\D/g,'');
   const numero = limpio.length === 10 ? '52'+limpio : limpio;
-  const msg = encodeURIComponent(`Hola ${nombre.split(' ')[0]}! Te escribo de Mi Negocio 2026 😊`);
+  const msg = encodeURIComponent(mensajeWhatsApp(c));
   window.open(`https://wa.me/${numero}?text=${msg}`, '_blank');
 }
 
@@ -961,7 +977,7 @@ function filtrar() {
       <div class="derecha">
         ${esArchivado?'<span class="badge sin-fecha">Archivado</span>':badgeEstado(c.estado,c.dias)}
       </div>
-      ${!esArchivado ? `<div class="wa-btn" onclick="abrirWhatsApp('${c.contacto}','${c.cliente.replace(/'/g,"")}',event)" title="WhatsApp">💬</div>` : ''}
+      ${!esArchivado ? `<div class="wa-btn" onclick="abrirWhatsApp('${c.id}',event)" title="WhatsApp">💬</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -983,7 +999,7 @@ function verDetalle(id) {
         <div style="font-size:13px;color:var(--text2);">${c.id} · ${c.contacto||'Sin contacto'}</div>
         <div style="margin-top:4px;">${badgeEstado(c.estado,c.dias)}</div>
       </div>
-      ${c.contacto ? `<div class="wa-btn" style="width:38px;height:38px;font-size:16px;" onclick="abrirWhatsApp('${c.contacto}','${c.cliente.replace(/'/g,"")}',event)">💬</div>` : ''}
+      ${c.contacto ? `<div class="wa-btn" style="width:38px;height:38px;font-size:16px;" onclick="abrirWhatsApp('${c.id}',event)">💬</div>` : ''}
     </div>
     <div class="detalle-grid">
       <div><div class="detalle-label">Paquete</div><div class="detalle-value">${c.paquete||'—'}</div></div>
@@ -1311,7 +1327,7 @@ function renderCuentas() {
             return `<div class="slot-row">
               <div class="slot-num">Slot ${i+1}</div>
               <div class="slot-cliente">${nombreCliente}<div style="font-size:11px;color:var(--text3);">${s}</div></div>
-              <button class="slot-action" onclick="liberarSlot('${c.nombre}','${i}')">Liberar</button>
+              ${MI_ROL==='admin' ? `<button class="slot-action" onclick="liberarSlot('${c.nombre}','${i}')">Liberar</button>` : ''}
             </div>`;
           }).join('')}
           ${MI_ROL==='admin' ? `<button class="delete-acc-btn" style="width:100%;margin-top:14px;padding:9px;" onclick="confirmarEliminarCuenta('${c.nombre.replace(/'/g,"")}')">🗑 Eliminar esta cuenta</button>` : ''}
@@ -1413,13 +1429,17 @@ function abrirModalNuevaCuenta() {
 function renderGanancias() {
   const vendedores = MI_ROL==='admin' ? ['ximenita','david','saito'] : [MI_VENDEDOR];
   const resumen = {};
-  vendedores.forEach(v=>resumen[v]={total:0,clientes:0});
+  vendedores.forEach(v=>resumen[v]={total:0,clientes:0,caidos:0});
   let misGanancias=0, misClientes=0;
   todosClientes.forEach(c=>{
+    // Un cliente ARCHIVADO o VENCIDO no debe seguir generando comisión activa.
+    // En cuanto vuelve a estar activo (renueva), automáticamente vuelve a sumar.
+    const cuentaParaComision = c.estado_raw !== 'ARCHIVADO' && c.estado !== 'vencido';
     const g=parseFloat(c.ganancia)||0;
     const v=c.vendedor.toLowerCase();
-    if(v==='yo'){misGanancias+=g;misClientes++;}
+    if(v==='yo'){ if(cuentaParaComision){misGanancias+=g;misClientes++;} }
     else if(resumen[v]!==undefined){
+      if (!cuentaParaComision) { resumen[v].caidos++; return; }
       const paqueteData = PAQUETES_GANANCIA[c.paquete];
       const pct = COMISIONES[v] !== undefined ? COMISIONES[v] : 100;
       const comision = paqueteData ? paqueteData.gananciaAmigo * (pct/100) : 0;
@@ -1428,11 +1448,18 @@ function renderGanancias() {
     }
   });
   const pagado={};
-  vendedores.forEach(v=>pagado[v]=0);
+  const historialPorVendedor={};
+  vendedores.forEach(v=>{pagado[v]=0; historialPorVendedor[v]=[];});
   todosPagos.forEach(p=>{
     const v=(p.vendedor||'').toLowerCase();
-    if(pagado[v]!==undefined) pagado[v]+=parseFloat(p.monto)||0;
+    if(pagado[v]!==undefined) {
+      pagado[v]+=parseFloat(p.monto)||0;
+      historialPorVendedor[v].push(p);
+    }
   });
+  // Ordenar historial más reciente primero (por orden de aparición en la hoja, invertido)
+  Object.keys(historialPorVendedor).forEach(v => historialPorVendedor[v].reverse());
+
   const total=todosClientes.reduce((s,c)=>s+(parseFloat(c.precio)||0),0);
 
   const heroHTML = `
@@ -1442,9 +1469,9 @@ function renderGanancias() {
         <div style="font-family:'Space Grotesk';font-size:26px;font-weight:700;">$${total.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
       </div>` : ''}
       <div class="earn-hero" style="${MI_ROL!=='admin'?'grid-column:1/-1;':''}">
-        <div class="lbl">Tu ganancia</div>
+        <div class="lbl">Tu ganancia (clientes activos)</div>
         <div class="big">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
-        <div style="font-size:12px;color:#c4b8f9;margin-top:4px;">${misClientes} ventas propias</div>
+        <div style="font-size:12px;color:#c4b8f9;margin-top:4px;">${misClientes} ventas propias activas</div>
       </div>
     </div>`;
 
@@ -1456,16 +1483,18 @@ function renderGanancias() {
         const pag=pagado[v];
         const pend=acum-pag;
         const pct = COMISIONES[v] !== undefined ? COMISIONES[v] : 100;
+        const hist = historialPorVendedor[v];
+        const histId = 'hist-'+v;
         return `
         <div class="vendor-row" style="flex-direction:column;align-items:stretch;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
             <div>
               <div class="vendor-name" style="text-transform:capitalize;">${v==='ximenita'?'Xime':v}</div>
-              <div class="vendor-pct">${resumen[v].clientes} clientes · ${pct}% comisión</div>
+              <div class="vendor-pct">${resumen[v].clientes} clientes activos · ${pct}% comisión${resumen[v].caidos>0?` · <span style="color:var(--red);">${resumen[v].caidos} vencido${resumen[v].caidos!==1?'s':''} (no cuenta${resumen[v].caidos!==1?'n':''})</span>`:''}</div>
             </div>
             <button onclick="abrirModalPago('${v}',${pend.toFixed(2)})" class="btn-primary" style="width:auto;margin-top:0;padding:8px 14px;font-size:12px;">Registrar pago</button>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
             <div class="cuenta-info-item">
               <div class="cuenta-info-label">Acumulado</div>
               <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:var(--text);">$${acum.toFixed(2)}</div>
@@ -1479,18 +1508,41 @@ function renderGanancias() {
               <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:${pend>0.001?'var(--amber)':'var(--green)'};">$${pend.toFixed(2)}</div>
             </div>
           </div>
+          ${hist.length ? `
+          <div style="cursor:pointer;font-size:11.5px;color:var(--violet);font-weight:600;" onclick="document.getElementById('${histId}').classList.toggle('open')">📜 Ver historial de pagos (${hist.length}) ▾</div>
+          <div class="cuenta-body" id="${histId}" style="margin-top:6px;border-top:none;">
+            ${hist.map(p => `
+              <div class="slot-row">
+                <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
+                <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||p.concepto||''}</div>
+                <div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);font-size:13px;">$${parseFloat(p.monto||0).toFixed(2)}</div>
+              </div>`).join('')}
+          </div>` : `<div style="font-size:11.5px;color:var(--text3);">Sin pagos registrados aún.</div>`}
         </div>`;
       }).join('')}
     </div>` : `
     <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">Tu comisión</div>
     ${vendedores.map(v=>{
       const acum=resumen[v].total, pag=pagado[v], pend=acum-pag;
+      const hist = historialPorVendedor[v];
+      const histId = 'hist-'+v;
       return `<div class="vendor-row" style="flex-direction:column;align-items:stretch;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
           <div class="cuenta-info-item"><div class="cuenta-info-label">Acumulado</div><div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;">$${acum.toFixed(2)}</div></div>
           <div class="cuenta-info-item"><div class="cuenta-info-label">Pagado</div><div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:var(--green);">$${pag.toFixed(2)}</div></div>
           <div class="cuenta-info-item"><div class="cuenta-info-label">Pendiente</div><div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:${pend>0.001?'var(--amber)':'var(--green)'};">$${pend.toFixed(2)}</div></div>
         </div>
+        ${resumen[v].caidos>0?`<div style="font-size:11.5px;color:var(--red);margin-bottom:8px;">⚠️ ${resumen[v].caidos} cliente${resumen[v].caidos!==1?'s':''} vencido${resumen[v].caidos!==1?'s':''} — no cuenta${resumen[v].caidos!==1?'n':''} hasta que renueve${resumen[v].caidos!==1?'n':''}</div>`:''}
+        ${hist.length ? `
+        <div style="cursor:pointer;font-size:11.5px;color:var(--violet);font-weight:600;" onclick="document.getElementById('${histId}').classList.toggle('open')">📜 Ver historial de pagos (${hist.length}) ▾</div>
+        <div class="cuenta-body" id="${histId}" style="margin-top:6px;border-top:none;">
+          ${hist.map(p => `
+            <div class="slot-row">
+              <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
+              <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||p.concepto||''}</div>
+              <div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);font-size:13px;">$${parseFloat(p.monto||0).toFixed(2)}</div>
+            </div>`).join('')}
+        </div>` : `<div style="font-size:11.5px;color:var(--text3);">Sin pagos registrados aún.</div>`}
       </div>`;
     }).join('')}`;
 
@@ -1925,13 +1977,7 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{
   m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});
 });
 
-// ===== PENDIENTE 5: Multi-usuario =====
-function seleccionarUsuario(user, el) {
-  usuarioSeleccionado = user;
-  document.querySelectorAll('.user-pill').forEach(p=>p.classList.remove('active'));
-  el.classList.add('active');
-}
-
+// ===== PENDIENTE 5: Multi-usuario — permisos según rol =====
 function aplicarPermisosUI() {
   document.getElementById('user-nombre').textContent = MI_NOMBRE;
   document.getElementById('user-av').textContent = iniciales(MI_NOMBRE);
@@ -1939,23 +1985,34 @@ function aplicarPermisosUI() {
     document.getElementById('tab-config').style.display = 'none';
     document.getElementById('f-vendedor').style.display = 'none';
     document.getElementById('f-yo').textContent = 'Mis ventas';
+    // Los vendedores no agregan clientes: tú lo haces cuando ellos te avisan.
+    const fab = document.getElementById('fab-nuevo');
+    if (fab) fab.style.display = 'none';
+    // Las cuentas (correos, contraseñas, slots) las gestionas solo tú.
+    const btnNuevaCuenta = document.getElementById('btn-nueva-cuenta');
+    if (btnNuevaCuenta) btnNuevaCuenta.style.display = 'none';
   }
 }
 
 function hacerLogin() {
-  const pass = document.getElementById('login-pass').value.trim();
+  const usuario = document.getElementById('login-user').value.trim();
+  const clave = document.getElementById('login-pass').value.trim();
   const btn = document.getElementById('login-btn');
   const err = document.getElementById('login-error');
-  if (!pass) return;
+  if (!usuario || !clave) {
+    err.textContent = 'Escribe tu usuario y tu clave.';
+    err.style.display='block';
+    return;
+  }
   btn.disabled = true; btn.textContent = 'Verificando...';
   err.style.display = 'none';
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'login',key:pass})})
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'login',usuario,clave})})
     .then(r=>r.json())
     .then(res=>{
       if(res.status==='ok'){
-        APP_KEY = pass; MI_VENDEDOR = res.vendedor; MI_ROL = res.rol; MI_NOMBRE = res.nombre;
+        APP_KEY = res.token; MI_VENDEDOR = res.vendedor; MI_ROL = res.rol; MI_NOMBRE = res.nombre;
         try {
-          localStorage.setItem('app_key', pass);
+          localStorage.setItem('app_key', res.token);
           cargarConfigLocal();
         } catch(e){}
         document.getElementById('login-overlay').style.display='none';
@@ -1963,7 +2020,7 @@ function hacerLogin() {
         cargarDatos();
         cargarCuentasBackground();
       } else {
-        err.textContent = 'Clave incorrecta. Intenta de nuevo.';
+        err.textContent = res.message || 'Usuario o clave incorrectos.';
         err.style.display='block';
         btn.disabled=false; btn.textContent='Entrar';
       }
@@ -1981,12 +2038,12 @@ function cerrarSesion() {
   location.reload();
 }
 
-// Auto-login si ya hay clave guardada en este dispositivo
+// Auto-login si ya hay token guardado en este dispositivo
 (function(){
   let saved = '';
   try { saved = localStorage.getItem('app_key')||''; } catch(e){}
   if (!saved) return;
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'login',key:saved})})
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'verificarSesion',key:saved})})
     .then(r=>r.json())
     .then(res=>{
       if(res.status==='ok'){
@@ -1996,6 +2053,8 @@ function cerrarSesion() {
         aplicarPermisosUI();
         cargarDatos();
         cargarCuentasBackground();
+      } else {
+        try { localStorage.removeItem('app_key'); } catch(e){}
       }
     }).catch(()=>{});
 })();
