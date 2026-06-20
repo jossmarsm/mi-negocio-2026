@@ -1035,7 +1035,25 @@ function toast(msg, tipo='success', icono='') {
 }
 
 // ===== WhatsApp con mensaje dinámico según estado del cliente =====
+// Un cliente "recién agregado" (inicio en los últimos 3 días) recibe el
+// mensaje de bienvenida en vez del de vencimiento/recordatorio normal —
+// esto cubre el caso de registrar al cliente sin teléfono y agregárselo
+// después al editar: el botón de WhatsApp en su detalle sigue ofreciendo
+// la bienvenida correcta aunque ya hayan pasado un par de días.
+function esClienteReciente(c) {
+  const fechaInicio = parseFecha(c.inicio);
+  if (!fechaInicio) return false;
+  const hoy = new Date(); hoy.setHours(0,0,0,0);
+  fechaInicio.setHours(0,0,0,0);
+  const dias = Math.round((hoy - fechaInicio) / 86400000);
+  return dias >= 0 && dias <= 3;
+}
+
 function mensajeWhatsApp(c) {
+  if (esClienteReciente(c)) {
+    return mensajeBienvenida(c);
+  }
+
   const primerNombre = (c.cliente||'').trim().split(' ')[0] || 'amig@';
   const paquete = c.paquete || 'tu servicio';
 
@@ -1390,7 +1408,7 @@ function filtrar() {
       <div class="derecha">
         ${esArchivado?'<span class="badge sin-fecha">Archivado</span>':badgeEstado(c.estado,c.dias)}
       </div>
-      ${!esArchivado ? `<div class="wa-btn" onclick="abrirWhatsApp('${c.id}',event)" title="WhatsApp">💬</div>` : ''}
+      ${!esArchivado ? `<div class="wa-btn" onclick="abrirWhatsApp('${c.id}',event)" title="${esClienteReciente(c)?'Enviar bienvenida':'WhatsApp'}">${esClienteReciente(c)?'🎉':'💬'}</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -1412,7 +1430,7 @@ function verDetalle(id) {
         <div style="font-size:13px;color:var(--text2);">${c.id} · ${c.contacto||'Sin contacto'}</div>
         <div style="margin-top:4px;">${badgeEstado(c.estado,c.dias)}</div>
       </div>
-      ${c.contacto ? `<div class="wa-btn" style="width:38px;height:38px;font-size:16px;" onclick="abrirWhatsApp('${c.id}',event)">💬</div>` : ''}
+      ${c.contacto ? `<div class="wa-btn" style="width:38px;height:38px;font-size:16px;" onclick="abrirWhatsApp('${c.id}',event)" title="${esClienteReciente(c)?'Enviar bienvenida':'WhatsApp'}">${esClienteReciente(c)?'🎉':'💬'}</div>` : ''}
     </div>
     <div class="detalle-grid">
       <div><div class="detalle-label">Paquete</div><div class="detalle-value">${c.paquete||'—'}</div></div>
