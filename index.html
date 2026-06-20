@@ -704,6 +704,44 @@ body {
   </div>
 </div>
 
+<!-- MODAL VENTA ÚNICA -->
+<div class="modal-overlay" id="modal-venta-unica">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header">
+      <div class="modal-title">🎟️ Venta única</div>
+      <button class="modal-close" onclick="cerrarModal('modal-venta-unica')">✕</button>
+    </div>
+    <div id="vu-status"></div>
+    <div class="form-group">
+      <label class="form-label">Vendedor</label>
+      <select class="form-select" id="vu-vendedor">
+        <option value="ximenita">Xime</option>
+        <option value="david">David Guzmán</option>
+        <option value="saito">Saito</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Monto total de la venta</label>
+      <input class="form-input" type="number" id="vu-monto" placeholder="0" oninput="previsualizarVentaUnica()">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nota (opcional)</label>
+      <input class="form-input" id="vu-notas" placeholder="Ej. cuenta aparte, detalle...">
+    </div>
+    <div id="vu-preview" style="display:none;" class="ganancia-box">
+      <div>
+        <div class="ganancia-label">Tu mitad</div>
+        <div class="ganancia-value" id="vu-mitad-tu">$0</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="ganancia-label" style="color:var(--amber);">Mitad vendedor</div>
+        <div style="font-size:16px;color:var(--amber);font-weight:700;" id="vu-mitad-vend">$0</div>
+      </div>
+    </div>
+    <button class="btn-primary" id="btn-venta-unica" onclick="guardarVentaUnica()">Registrar venta única</button>
+  </div>
+</div>
+
 <!-- MODAL CONFIRMAR ELIMINAR CUENTA -->
 <div class="modal-overlay" id="modal-confirmar">
   <div class="modal" style="max-width:380px;">
@@ -724,6 +762,7 @@ body {
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw_r9t-i8Y0Mv6U78gVOg1eOYVy7r40qjQXXU8kicBaiot3c-S9Q6zF6-33b1FxgLqN0A/exec';
 
 let todosPagos = [];
+let todasVentasUnicas = [];
 let APP_KEY = '';
 let MI_VENDEDOR = '';
 let MI_ROL = '';
@@ -877,7 +916,7 @@ function mostrarSeccion(sec, btn) {
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if (sec==='cuentas') cargarCuentas();
-  if (sec==='ganancias') { cargarPagos().then(renderGanancias); }
+  if (sec==='ganancias') { Promise.all([cargarPagos(), cargarVentasUnicas()]).then(renderGanancias); }
   if (sec==='config') renderConfig();
 }
 
@@ -1429,7 +1468,7 @@ function abrirModalNuevaCuenta() {
 function renderGanancias() {
   const vendedores = MI_ROL==='admin' ? ['ximenita','david','saito'] : [MI_VENDEDOR];
   const resumen = {};
-  vendedores.forEach(v=>resumen[v]={total:0,clientes:0,caidos:0});
+  vendedores.forEach(v=>resumen[v]={total:0,clientes:0,caidos:0,ventasUnicas:0});
   let misGanancias=0, misClientes=0;
   todosClientes.forEach(c=>{
     // Un cliente ARCHIVADO o VENCIDO no debe seguir generando comisión activa.
@@ -1445,6 +1484,17 @@ function renderGanancias() {
       const comision = paqueteData ? paqueteData.gananciaAmigo * (pct/100) : 0;
       resumen[v].total+=comision; resumen[v].clientes++;
       misGanancias+=g; misClientes++;
+    }
+  });
+  // Ventas únicas: monto suelto repartido 50/50, sin fecha de renovación ni paquete.
+  // Se suman directo al acumulado del vendedor (no se "caen" por vencimiento, son de una sola vez).
+  todasVentasUnicas.forEach(vu=>{
+    const v=(vu.vendedor||'').toLowerCase();
+    const monto=parseFloat(vu.monto)||0;
+    const mitad=monto/2;
+    if(resumen[v]!==undefined){
+      resumen[v].total+=mitad; resumen[v].ventasUnicas++;
+      misGanancias+=mitad;
     }
   });
   const pagado={};
@@ -1490,9 +1540,12 @@ function renderGanancias() {
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
             <div>
               <div class="vendor-name" style="text-transform:capitalize;">${v==='ximenita'?'Xime':v}</div>
-              <div class="vendor-pct">${resumen[v].clientes} clientes activos · ${pct}% comisión${resumen[v].caidos>0?` · <span style="color:var(--red);">${resumen[v].caidos} vencido${resumen[v].caidos!==1?'s':''} (no cuenta${resumen[v].caidos!==1?'n':''})</span>`:''}</div>
+              <div class="vendor-pct">${resumen[v].clientes} clientes activos · ${pct}% comisión${resumen[v].ventasUnicas>0?` · ${resumen[v].ventasUnicas} venta${resumen[v].ventasUnicas!==1?'s':''} única${resumen[v].ventasUnicas!==1?'s':''} (50/50)`:''}${resumen[v].caidos>0?` · <span style="color:var(--red);">${resumen[v].caidos} vencido${resumen[v].caidos!==1?'s':''} (no cuenta${resumen[v].caidos!==1?'n':''})</span>`:''}</div>
             </div>
-            <button onclick="abrirModalPago('${v}',${pend.toFixed(2)})" class="btn-primary" style="width:auto;margin-top:0;padding:8px 14px;font-size:12px;">Registrar pago</button>
+            <div style="display:flex;gap:6px;">
+              <button onclick="abrirModalVentaUnica('${v}')" class="btn-primary" style="width:auto;margin-top:0;padding:8px 10px;font-size:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:none;" title="Registrar venta única">🎟️</button>
+              <button onclick="abrirModalPago('${v}',${pend.toFixed(2)})" class="btn-primary" style="width:auto;margin-top:0;padding:8px 14px;font-size:12px;">Registrar pago</button>
+            </div>
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
             <div class="cuenta-info-item">
@@ -1518,6 +1571,17 @@ function renderGanancias() {
                 <div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);font-size:13px;">$${parseFloat(p.monto||0).toFixed(2)}</div>
               </div>`).join('')}
           </div>` : `<div style="font-size:11.5px;color:var(--text3);">Sin pagos registrados aún.</div>`}
+          ${(() => { const vu = todasVentasUnicas.filter(x=>(x.vendedor||'').toLowerCase()===v); const vuId='vu-hist-'+v;
+            return vu.length ? `
+          <div style="cursor:pointer;font-size:11.5px;color:var(--amber);font-weight:600;margin-top:8px;" onclick="document.getElementById('${vuId}').classList.toggle('open')">🎟️ Ver ventas únicas (${vu.length}) ▾</div>
+          <div class="cuenta-body" id="${vuId}" style="margin-top:6px;border-top:none;">
+            ${vu.map(p => { const total=parseFloat(p.monto||0); return `
+              <div class="slot-row">
+                <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
+                <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||'Venta única'} · total $${total.toFixed(2)}</div>
+                <div style="font-family:'Space Grotesk';font-weight:700;color:var(--amber);font-size:13px;">$${(total/2).toFixed(2)}</div>
+              </div>`; }).join('')}
+          </div>` : ''; })()}
         </div>`;
       }).join('')}
     </div>` : `
@@ -1533,6 +1597,7 @@ function renderGanancias() {
           <div class="cuenta-info-item"><div class="cuenta-info-label">Pendiente</div><div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:${pend>0.001?'var(--amber)':'var(--green)'};">$${pend.toFixed(2)}</div></div>
         </div>
         ${resumen[v].caidos>0?`<div style="font-size:11.5px;color:var(--red);margin-bottom:8px;">⚠️ ${resumen[v].caidos} cliente${resumen[v].caidos!==1?'s':''} vencido${resumen[v].caidos!==1?'s':''} — no cuenta${resumen[v].caidos!==1?'n':''} hasta que renueve${resumen[v].caidos!==1?'n':''}</div>`:''}
+        ${resumen[v].ventasUnicas>0?`<div style="font-size:11.5px;color:var(--amber);margin-bottom:8px;">🎟️ ${resumen[v].ventasUnicas} venta${resumen[v].ventasUnicas!==1?'s':''} única${resumen[v].ventasUnicas!==1?'s':''} incluida${resumen[v].ventasUnicas!==1?'s':''} (50/50)</div>`:''}
         ${hist.length ? `
         <div style="cursor:pointer;font-size:11.5px;color:var(--violet);font-weight:600;" onclick="document.getElementById('${histId}').classList.toggle('open')">📜 Ver historial de pagos (${hist.length}) ▾</div>
         <div class="cuenta-body" id="${histId}" style="margin-top:6px;border-top:none;">
@@ -1543,6 +1608,17 @@ function renderGanancias() {
               <div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);font-size:13px;">$${parseFloat(p.monto||0).toFixed(2)}</div>
             </div>`).join('')}
         </div>` : `<div style="font-size:11.5px;color:var(--text3);">Sin pagos registrados aún.</div>`}
+        ${(() => { const vu = todasVentasUnicas.filter(x=>(x.vendedor||'').toLowerCase()===v); const vuId='vu-hist-'+v;
+          return vu.length ? `
+        <div style="cursor:pointer;font-size:11.5px;color:var(--amber);font-weight:600;margin-top:8px;" onclick="document.getElementById('${vuId}').classList.toggle('open')">🎟️ Ver ventas únicas (${vu.length}) ▾</div>
+        <div class="cuenta-body" id="${vuId}" style="margin-top:6px;border-top:none;">
+          ${vu.map(p => { const total=parseFloat(p.monto||0); return `
+            <div class="slot-row">
+              <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
+              <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||'Venta única'} · total $${total.toFixed(2)}</div>
+              <div style="font-family:'Space Grotesk';font-weight:700;color:var(--amber);font-size:13px;">$${(total/2).toFixed(2)}</div>
+            </div>`; }).join('')}
+        </div>` : ''; })()}
       </div>`;
     }).join('')}`;
 
@@ -1554,6 +1630,55 @@ function cargarPagos() {
     .then(r=>r.json())
     .then(res=>{ todosPagos = res.rows||[]; })
     .catch(()=>{ todosPagos = []; });
+}
+
+function cargarVentasUnicas() {
+  return fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'ventas_unicas',key:APP_KEY})})
+    .then(r=>r.json())
+    .then(res=>{ todasVentasUnicas = res.rows||[]; })
+    .catch(()=>{ todasVentasUnicas = []; });
+}
+
+function previsualizarVentaUnica() {
+  const monto = parseFloat(document.getElementById('vu-monto').value)||0;
+  const preview = document.getElementById('vu-preview');
+  if (monto <= 0) { preview.style.display='none'; return; }
+  const mitad = monto/2;
+  document.getElementById('vu-mitad-tu').textContent = '$'+mitad.toFixed(2);
+  document.getElementById('vu-mitad-vend').textContent = '$'+mitad.toFixed(2);
+  preview.style.display='flex';
+}
+
+function abrirModalVentaUnica(vendedorPreseleccionado) {
+  document.getElementById('vu-vendedor').value = vendedorPreseleccionado || 'saito';
+  document.getElementById('vu-monto').value = '';
+  document.getElementById('vu-notas').value = '';
+  document.getElementById('vu-preview').style.display = 'none';
+  document.getElementById('vu-status').innerHTML = '';
+  document.getElementById('btn-venta-unica').disabled = false;
+  document.getElementById('btn-venta-unica').textContent = 'Registrar venta única';
+  document.getElementById('modal-venta-unica').classList.add('open');
+}
+
+function guardarVentaUnica() {
+  const vendedor = document.getElementById('vu-vendedor').value;
+  const monto = parseFloat(document.getElementById('vu-monto').value)||0;
+  const notas = document.getElementById('vu-notas').value.trim();
+  const status = document.getElementById('vu-status');
+  if (monto <= 0) { status.innerHTML = '<div class="error-msg">⚠️ Pon un monto válido.</div>'; return; }
+  const btn = document.getElementById('btn-venta-unica');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  const hoy = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'registrarVentaUnica',key:APP_KEY,fecha:hoy,vendedor:vendedor,monto:monto,notas:notas})})
+    .then(r=>r.json())
+    .then(res=>{
+      if(res.status==='ok'){
+        status.innerHTML = '<div class="success-box"><p>✅ Venta única registrada</p></div>';
+        cargarVentasUnicas().then(()=>{ renderGanancias(); });
+        setTimeout(()=>cerrarModal('modal-venta-unica'), 1000);
+      } else throw new Error(res.message);
+    })
+    .catch(()=>{ status.innerHTML='<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>'; btn.disabled=false; btn.textContent='Registrar venta única'; });
 }
 
 function abrirModalPago(vendedor, pendiente) {
