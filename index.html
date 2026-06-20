@@ -860,10 +860,14 @@ body {
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw_r9t-i8Y0Mv6U78gVOg1eOYVy7r40qjQXXU8kicBaiot3c-S9Q6zF6-33b1FxgLqN0A/exec';
+// Link que se incluye en el WhatsApp de bienvenida al cliente nuevo — publicación
+// de Facebook con recomendaciones de otros clientes, para dar confianza.
+const LINK_BIENVENIDA = 'https://www.facebook.com/share/p/1LpUAnuuGm/';
 
 let todosPagos = [];
 let todasVentasUnicas = [];
 let APP_KEY = '';
+let ultimoClienteGuardado = null; // datos del último cliente recién registrado, para el botón de bienvenida
 let MI_VENDEDOR = '';
 let MI_ROL = '';
 let MI_NOMBRE = '';
@@ -1008,6 +1012,24 @@ function abrirWhatsApp(id, event) {
   const limpio = c.contacto.replace(/\D/g,'');
   const numero = limpio.length === 10 ? '52'+limpio : limpio;
   const msg = encodeURIComponent(mensajeWhatsApp(c));
+  window.open(`https://wa.me/${numero}?text=${msg}`, '_blank');
+}
+
+// ===== WhatsApp de bienvenida al registrar un cliente nuevo =====
+// A diferencia de abrirWhatsApp(), este no busca en todosClientes —
+// recibe los datos directo del formulario recién guardado, porque el
+// cliente nuevo aún no está en la lista hasta el próximo cargarDatos().
+function mensajeBienvenida(datos) {
+  const primerNombre = (datos.cliente||'').trim().split(' ')[0] || 'amig@';
+  const paquete = datos.paquete || 'tu servicio';
+  return `¡Hola ${primerNombre}! 🎉 Muchas gracias por confiar en nosotros para tu ${paquete}. Tu número de cliente es *${datos.id}* — guárdalo, te va a servir para cualquier aclaración o renovación. Esperamos que lo disfrutes un montón, y si conoces a alguien que también le pueda interesar, nos harías muy felices con la recomendación 😊 Aquí puedes ver lo que opinan otros clientes (y si gustas, nos encantaría leerte ahí también): ${LINK_BIENVENIDA}`;
+}
+
+function abrirWhatsAppBienvenida(datos) {
+  if (!datos.contacto) { toast('Este cliente no tiene teléfono guardado', 'error'); return; }
+  const limpio = datos.contacto.replace(/\D/g,'');
+  const numero = limpio.length === 10 ? '52'+limpio : limpio;
+  const msg = encodeURIComponent(mensajeBienvenida(datos));
   window.open(`https://wa.me/${numero}?text=${msg}`, '_blank');
 }
 
@@ -1392,6 +1414,7 @@ function abrirModalNuevo() {
   document.getElementById('ganancia-preview').style.display='none';
   document.getElementById('btn-guardar').disabled=false;
   document.getElementById('btn-guardar').textContent='Guardar cliente';
+  document.getElementById('btn-guardar').style.display='';
   const hoy=new Date().toISOString().split('T')[0];
   document.getElementById('n-inicio').value=hoy;
   calcularRenovacion(); generarID();
@@ -1602,10 +1625,25 @@ function guardarCliente() {
     .then(res=>{
       if(res.status==='ok'){
         ultimoID++;
-        document.getElementById('form-status').innerHTML='<div class="success-box"><p>✅ Cliente guardado correctamente</p></div>';
-        btn.textContent='Guardado ✓';
+        const tieneTelefono = !!datos.contacto;
+        ultimoClienteGuardado = datos;
+        document.getElementById('form-status').innerHTML = `
+          <div class="success-box">
+            <p>✅ Cliente guardado correctamente</p>
+          </div>
+          ${tieneTelefono ? `
+          <button type="button" class="btn-primary" style="background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 18px -4px rgba(52,211,153,0.5);margin-bottom:8px;" onclick="abrirWhatsAppBienvenida(ultimoClienteGuardado)">
+            💬 Enviar bienvenida por WhatsApp
+          </button>
+          <button type="button" class="btn-primary" style="background:var(--surface);color:var(--text2);box-shadow:none;border:1px solid var(--border);" onclick="cerrarModal('modal-nuevo');cargarDatos();">
+            Listo, cerrar
+          </button>` : `<div style="font-size:12px;color:var(--text3);margin-bottom:4px;">Este cliente no tiene teléfono guardado, no se puede mandar bienvenida.</div>`}
+        `;
+        btn.style.display = 'none';
         toast('Cliente guardado, ¡a darle!', 'success', '🎉');
-        setTimeout(()=>{cerrarModal('modal-nuevo');cargarDatos();},1200);
+        if (!tieneTelefono) {
+          setTimeout(()=>{cerrarModal('modal-nuevo');cargarDatos();},1500);
+        }
       } else {
         throw new Error(res.message||'Error desconocido');
       }
