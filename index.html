@@ -274,6 +274,10 @@ body {
   width: 100%; padding: 11px 13px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   font-size: 14px; color: var(--text); background: var(--surface); outline: none; transition: all 0.2s var(--ease);
 }
+.form-select option {
+  background: var(--surface-solid); color: var(--text); padding: 8px;
+}
+.form-select option:disabled { color: var(--text3); }
 .form-input:focus, .form-select:focus { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(139,92,246,0.12); }
 .form-input[readonly] { background: rgba(255,255,255,0.02); color: var(--text2); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -444,6 +448,36 @@ body {
 .disclosure .chev { transition: transform 0.2s var(--ease); font-size: 9px; }
 .disclosure.open .chev { transform: rotate(180deg); }
 
+/* ===== Tour de bienvenida ===== */
+.tour-overlay {
+  display: none; position: fixed; inset: 0; z-index: 600;
+  background: rgba(4,4,8,0.78); animation: fadeIn 0.25s var(--ease);
+}
+.tour-overlay.open { display: block; }
+.tour-spotlight {
+  position: absolute; border-radius: 14px; pointer-events: none;
+  box-shadow: 0 0 0 4000px rgba(4,4,8,0.78), 0 0 0 3px rgba(139,92,246,0.7), 0 0 24px rgba(139,92,246,0.5);
+  transition: top 0.35s var(--ease), left 0.35s var(--ease), width 0.35s var(--ease), height 0.35s var(--ease);
+}
+.tour-card {
+  position: absolute; background: var(--surface-solid); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg); padding: 18px 20px; width: 280px; max-width: calc(100vw - 40px);
+  box-shadow: 0 20px 50px -10px rgba(0,0,0,0.6); transition: top 0.35s var(--ease), left 0.35s var(--ease);
+  z-index: 601;
+}
+.tour-step-label { font-size: 10.5px; color: var(--violet); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+.tour-title { font-family: 'Space Grotesk'; font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+.tour-text { font-size: 13px; color: var(--text2); line-height: 1.5; margin-bottom: 14px; }
+.tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.tour-skip { background: none; border: none; color: var(--text3); font-size: 12.5px; cursor: pointer; padding: 6px 4px; }
+.tour-skip:hover { color: var(--text2); }
+.tour-next {
+  background: linear-gradient(135deg, var(--violet), var(--violet2)); color: #fff; border: none;
+  padding: 9px 18px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 6px 16px -4px rgba(139,92,246,0.5); transition: transform 0.15s var(--ease);
+}
+.tour-next:active { transform: scale(0.95); }
+
 /* ===== Toast ===== */
 @keyframes toastPop { 0% { opacity:0; transform: translate(-50%, 14px) scale(0.9); } 60% { opacity:1; transform: translate(-50%, -3px) scale(1.02); } 100% { opacity:1; transform: translate(-50%, 0) scale(1); } }
 .toast {
@@ -524,15 +558,16 @@ body {
       <div class="av" id="user-av">?</div>
       <span id="user-nombre">—</span>
     </div>
+    <button class="refresh-btn" id="btn-ayuda" onclick="iniciarTour(true)" title="Cómo funciona la app">❓</button>
     <button class="refresh-btn" id="refresh-btn" onclick="cargarDatos()">↻</button>
   </div>
 </div>
 
 <div class="nav-tabs" id="nav-tabs">
-  <div class="nav-tab active" onclick="mostrarSeccion('clientes', this)">👥 Clientes</div>
-  <div class="nav-tab" onclick="mostrarSeccion('cuentas', this)">🔑 Cuentas</div>
-  <div class="nav-tab" onclick="mostrarSeccion('catalogo', this)">📦 Catálogo</div>
-  <div class="nav-tab" onclick="mostrarSeccion('ganancias', this)">📊 Ganancias</div>
+  <div class="nav-tab active" id="tab-clientes" onclick="mostrarSeccion('clientes', this)">👥 Clientes</div>
+  <div class="nav-tab" id="tab-cuentas" onclick="mostrarSeccion('cuentas', this)">🔑 Cuentas</div>
+  <div class="nav-tab" id="tab-catalogo" onclick="mostrarSeccion('catalogo', this)">📦 Catálogo</div>
+  <div class="nav-tab" id="tab-ganancias" onclick="mostrarSeccion('ganancias', this)">📊 Ganancias</div>
   <div class="nav-tab" id="tab-config" onclick="mostrarSeccion('config', this)">⚙️ Configuración</div>
 </div>
 
@@ -857,6 +892,20 @@ body {
 </div>
 
 <div id="toast-container"></div>
+
+<!-- TOUR DE BIENVENIDA -->
+<div class="tour-overlay" id="tour-overlay">
+  <div class="tour-spotlight" id="tour-spotlight"></div>
+  <div class="tour-card" id="tour-card">
+    <div class="tour-step-label" id="tour-step-label">Paso 1 de 5</div>
+    <div class="tour-title" id="tour-title">¡Bienvenido!</div>
+    <div class="tour-text" id="tour-text">Texto del paso</div>
+    <div class="tour-actions">
+      <button type="button" class="tour-skip" onclick="cerrarTour()">Saltar</button>
+      <button type="button" class="tour-next" id="tour-next-btn" onclick="siguientePasoTour()">Siguiente</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw_r9t-i8Y0Mv6U78gVOg1eOYVy7r40qjQXXU8kicBaiot3c-S9Q6zF6-33b1FxgLqN0A/exec';
@@ -1389,10 +1438,12 @@ function poblarSelectsPaquetes() {
   const selects = ['n-paquete','e-paquete'];
   selects.forEach(selId => {
     const sel = document.getElementById(selId);
-    const esEdicion = selId === 'e-paquete';
     const valorActual = sel.value;
+    // Ambos selects (crear y editar) llevan la misma info completa, para
+    // que al editar también se pueda recalcular la ganancia correctamente
+    // si el cliente cambió de combo.
     sel.innerHTML = '<option value="">Selecciona...</option>' + Object.entries(PAQUETES_GANANCIA).map(([nombre,d])=>{
-      const valor = esEdicion ? `${nombre}|${d.precio}` : `${nombre}|${d.precio}|${d.gananciaAmigo}|${d.gananciaNeta}`;
+      const valor = `${nombre}|${d.precio}|${d.gananciaAmigo}|${d.gananciaNeta}`;
       return `<option value="${valor}">${nombre} — $${d.precio}</option>`;
     }).join('');
     if (valorActual) sel.value = valorActual;
@@ -2483,6 +2534,29 @@ function calcularRenovacionEditar() {
 function guardarEdicion() {
   const id = document.getElementById('e-id').value;
   const sel = document.getElementById('e-paquete').value;
+  const vendedorSel = document.getElementById('e-vendedor').value;
+
+  // Recalculamos la ganancia con el paquete y vendedor actuales del
+  // formulario — igual que al crear un cliente nuevo. Si no hay un
+  // paquete válido seleccionado (combo viejo ya no listado), dejamos que
+  // el backend conserve lo que ya tenía guardado, mandando null.
+  let gananciaRecalculada = null;
+  if (sel) {
+    const partes = sel.split('|');
+    const gananciaAmigo = parseFloat(partes[2]);
+    const gananciaMia = parseFloat(partes[3]);
+    if (!isNaN(gananciaAmigo) && !isNaN(gananciaMia)) {
+      const vendedorLower = vendedorSel.toLowerCase();
+      if (vendedorLower === 'yo') {
+        gananciaRecalculada = gananciaMia + gananciaAmigo;
+      } else {
+        const pct = COMISIONES[vendedorLower] !== undefined ? COMISIONES[vendedorLower] : 100;
+        const comision = gananciaAmigo * (pct/100);
+        gananciaRecalculada = gananciaMia + (gananciaAmigo - comision);
+      }
+    }
+  }
+
   const datos = {
     accion: 'editarCliente', key:APP_KEY,
     id,
@@ -2493,11 +2567,14 @@ function guardarEdicion() {
     cuenta: document.getElementById('e-cuenta').value.trim(),
     inicio: document.getElementById('e-inicio').value ? new Date(document.getElementById('e-inicio').value).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}) : '',
     renovacion: document.getElementById('e-renovacion').value,
-    vendedor: document.getElementById('e-vendedor').value,
+    vendedor: vendedorSel,
     pago: document.getElementById('e-pago').value,
     estado: document.getElementById('e-estado').value,
     notas: document.getElementById('e-notas').value.trim(),
   };
+  if (gananciaRecalculada !== null) {
+    datos.ganancia = gananciaRecalculada.toFixed(2);
+  }
   const btn = document.getElementById('btn-editar');
   btn.disabled = true; btn.textContent = 'Guardando...';
   fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify(datos)})
@@ -2583,6 +2660,12 @@ function aplicarPermisosUI() {
     const btnNuevaCuenta = document.getElementById('btn-nueva-cuenta');
     if (btnNuevaCuenta) btnNuevaCuenta.style.display = 'none';
   }
+  // Tour automático la primera vez que este rol entra en este dispositivo.
+  // Se da un pequeño respiro para que el layout ya esté pintado antes de medirlo.
+  const yaVioTour = localStorage.getItem('tour_visto_'+MI_ROL);
+  if (!yaVioTour) {
+    setTimeout(()=>iniciarTour(false), 600);
+  }
 }
 
 function hacerLogin() {
@@ -2629,6 +2712,88 @@ function cerrarSesion() {
   try { localStorage.removeItem('app_key'); } catch(e){}
   location.reload();
 }
+
+// ===== Tour de bienvenida =====
+// Pasos comunes a todos los roles, más los exclusivos de admin (config e
+// historial). Cada paso apunta a un elemento real del DOM por su ID, así
+// que si esos IDs cambian en el futuro, hay que actualizarlos aquí también.
+const TOUR_PASOS_BASE = [
+  { id: 'tab-clientes', titulo: '👥 Clientes', texto: 'Aquí ves a todos tus clientes: quién está activo, quién está por vencer y quién ya venció. Usa los filtros de arriba para encontrar rápido lo que buscas.' },
+  { id: 'tab-cuentas', titulo: '🔑 Cuentas', texto: 'Aquí están las cuentas de streaming con sus correos, contraseñas y qué slots están libres u ocupados.' },
+  { id: 'tab-catalogo', titulo: '📦 Catálogo', texto: 'Aquí ves todos los combos disponibles, su precio y lo que te toca a ti de comisión por cada venta.' },
+  { id: 'tab-ganancias', titulo: '📊 Ganancias', texto: 'Aquí llevas el control de lo que has generado, lo que ya te pagaron y lo que sigue pendiente.' },
+];
+const TOUR_PASO_CONFIG = { id: 'tab-config', titulo: '⚙️ Configuración', texto: 'Aquí ajustas precios, comisiones y agregas cuentas o combos nuevos.' };
+const TOUR_PASO_AYUDA = { id: 'btn-ayuda', titulo: '❓ ¿Te perdiste?', texto: 'Toca aquí cuando quieras para repetir este recorrido.' };
+
+let tourPasos = [];
+let tourPasoActual = 0;
+
+function construirPasosTour() {
+  tourPasos = [...TOUR_PASOS_BASE];
+  if (MI_ROL === 'admin') tourPasos.push(TOUR_PASO_CONFIG);
+  tourPasos.push(TOUR_PASO_AYUDA);
+}
+
+function iniciarTour(esManual) {
+  construirPasosTour();
+  tourPasoActual = 0;
+  document.getElementById('tour-overlay').classList.add('open');
+  mostrarPasoTour();
+}
+
+function mostrarPasoTour() {
+  const paso = tourPasos[tourPasoActual];
+  if (!paso) { cerrarTour(); return; }
+
+  const el = document.getElementById(paso.id);
+  if (!el) { siguientePasoTour(); return; } // si el elemento no existe en este rol, lo saltamos
+
+  const rect = el.getBoundingClientRect();
+  const spot = document.getElementById('tour-spotlight');
+  const pad = 6;
+  spot.style.top = (rect.top - pad) + 'px';
+  spot.style.left = (rect.left - pad) + 'px';
+  spot.style.width = (rect.width + pad*2) + 'px';
+  spot.style.height = (rect.height + pad*2) + 'px';
+
+  const card = document.getElementById('tour-card');
+  // Por default la tarjeta va debajo del elemento; si no cabe (cerca del
+  // fondo de la pantalla), se acomoda arriba en su lugar.
+  const espacioAbajo = window.innerHeight - rect.bottom;
+  const cardAlto = 160;
+  let top, left;
+  if (espacioAbajo > cardAlto + 20) {
+    top = rect.bottom + 14;
+  } else {
+    top = rect.top - cardAlto - 14;
+  }
+  left = Math.min(Math.max(rect.left, 16), window.innerWidth - 296);
+  card.style.top = Math.max(top, 16) + 'px';
+  card.style.left = left + 'px';
+
+  document.getElementById('tour-step-label').textContent = `Paso ${tourPasoActual+1} de ${tourPasos.length}`;
+  document.getElementById('tour-title').textContent = paso.titulo;
+  document.getElementById('tour-text').textContent = paso.texto;
+  document.getElementById('tour-next-btn').textContent = tourPasoActual === tourPasos.length-1 ? 'Listo' : 'Siguiente';
+}
+
+function siguientePasoTour() {
+  tourPasoActual++;
+  if (tourPasoActual >= tourPasos.length) { cerrarTour(); return; }
+  mostrarPasoTour();
+}
+
+function cerrarTour() {
+  document.getElementById('tour-overlay').classList.remove('open');
+  if (MI_ROL) localStorage.setItem('tour_visto_'+MI_ROL, '1');
+}
+
+// Si la pantalla cambia de tamaño mientras el tour está abierto (rotar el
+// celular, redimensionar ventana), recalculamos la posición del spotlight.
+window.addEventListener('resize', () => {
+  if (document.getElementById('tour-overlay').classList.contains('open')) mostrarPasoTour();
+});
 
 // Auto-login si ya hay token guardado en este dispositivo
 (function(){
