@@ -670,8 +670,7 @@ function abrirModalNuevo() {
   document.getElementById('n-contacto').value='';
   document.getElementById('n-paquete').value='';
   document.getElementById('n-precio').value='';
-  document.getElementById('n-cuenta').innerHTML='<option value="">Selecciona primero un paquete...</option>';
-  document.getElementById('n-cuenta-info').textContent='';
+  document.getElementById('n-cuentas-selects').innerHTML='<div style="font-size:13px;color:var(--text3);">Selecciona primero un paquete...</div>';
   document.getElementById('n-renovacion').value='';
   document.getElementById('n-vendedor').value='YO';
   document.getElementById('n-pago').value='PAGADO';
@@ -699,8 +698,7 @@ function actualizarPrecio() {
   if(!sel){
     document.getElementById('n-precio').value='';
     document.getElementById('ganancia-preview').style.display='none';
-    document.getElementById('n-cuenta').innerHTML='<option value="">Selecciona primero un paquete...</option>';
-    document.getElementById('n-cuenta-info').textContent='';
+    document.getElementById('n-cuentas-selects').innerHTML='<div style="font-size:13px;color:var(--text3);">Selecciona primero un paquete...</div>';
     return;
   }
   const p=sel.split('|');
