@@ -365,6 +365,51 @@ body {
 .earn-hero .lbl { font-size: 11px; color: #c4b8f9; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
 .earn-hero .big { font-family: 'Space Grotesk'; font-size: 30px; font-weight: 700; margin-top: 6px; }
 
+/* ===== Earnings v2: pending-first hero with progress ring ===== */
+.earn-wrap { display: flex; flex-direction: column; gap: 14px; }
+.earn-top-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .earn-top-grid { grid-template-columns: 1fr; } }
+
+.pending-hero {
+  position: relative; overflow: hidden;
+  background: linear-gradient(150deg, rgba(139,92,246,0.20), rgba(20,20,31,0.4) 60%);
+  border: 1px solid rgba(139,92,246,0.32); border-radius: var(--radius-lg);
+  padding: 22px; display: flex; align-items: center; gap: 18px;
+  animation: fadeUp 0.4s var(--ease) both;
+}
+.pending-hero::before {
+  content: ''; position: absolute; top: -60%; right: -30%; width: 260px; height: 260px;
+  background: radial-gradient(circle, rgba(139,92,246,0.25), transparent 70%); pointer-events: none;
+}
+.ring-wrap { position: relative; width: 92px; height: 92px; flex-shrink: 0; }
+.ring-wrap svg { transform: rotate(-90deg); }
+.ring-track { fill: none; stroke: rgba(255,255,255,0.08); stroke-width: 9; }
+.ring-progress { fill: none; stroke: url(#ringGrad); stroke-width: 9; stroke-linecap: round; transition: stroke-dashoffset 0.7s var(--ease); }
+.ring-center { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk'; font-size: 13px; font-weight: 700; color: var(--text2); }
+.pending-hero .lbl { font-size: 11px; color: #c4b8f9; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; }
+.pending-hero .big { font-family: 'Space Grotesk'; font-size: 32px; font-weight: 700; margin-top: 4px; line-height: 1; }
+.pending-hero .sub { font-size: 12px; color: var(--text2); margin-top: 6px; }
+.pending-hero.all-paid .big { color: var(--green); }
+
+.mini-stat { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; justify-content: center; animation: fadeUp 0.4s var(--ease) both; }
+.mini-stat .lbl { font-size: 10.5px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+.mini-stat .val { font-family: 'Space Grotesk'; font-size: 21px; font-weight: 700; margin-top: 5px; }
+
+.spark-line { font-size: 11.5px; color: var(--text2); display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.spark-line.warn { color: var(--amber); }
+.spark-line.tag { color: var(--text2); }
+
+.vendor-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; animation: fadeUp 0.4s var(--ease) both; }
+.vendor-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.vendor-card-name { font-family: 'Space Grotesk'; font-size: 14.5px; font-weight: 700; text-transform: capitalize; }
+.vendor-card-meta { font-size: 11.5px; color: var(--text2); margin-top: 2px; }
+.vendor-mini-ring { width: 38px; height: 38px; flex-shrink: 0; }
+.vendor-mini-ring svg { transform: rotate(-90deg); }
+.vendor-stat-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.disclosure { cursor: pointer; font-size: 11.5px; font-weight: 600; display: flex; align-items: center; gap: 5px; padding: 6px 0; user-select: none; }
+.disclosure .chev { transition: transform 0.2s var(--ease); font-size: 9px; }
+.disclosure.open .chev { transform: rotate(180deg); }
+
 /* ===== Toast ===== */
 .toast {
   position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%);
@@ -1512,117 +1557,142 @@ function renderGanancias() {
 
   const total=todosClientes.reduce((s,c)=>s+(parseFloat(c.precio)||0),0);
 
+  // Pendiente total: suma de todos los vendedores visibles para este usuario.
+  // Para un vendedor individual, es solo lo suyo — eso es lo primero que quiere ver al entrar.
+  let pendienteTotal = 0, acumuladoTotal = 0, pagadoTotal = 0;
+  vendedores.forEach(v => {
+    acumuladoTotal += resumen[v].total;
+    pagadoTotal += pagado[v];
+  });
+  pendienteTotal = acumuladoTotal - pagadoTotal;
+  const pctPagado = acumuladoTotal > 0.001 ? Math.max(0, Math.min(100, (pagadoTotal/acumuladoTotal)*100)) : 100;
+  const ringR = 38, ringC = 2*Math.PI*ringR;
+  const ringOffset = ringC - (pctPagado/100)*ringC;
+  const todoAlCorriente = pendienteTotal <= 0.001;
+
+  const heroLabel = MI_ROL==='admin' ? (vendedores.length>1 ? 'Pendiente por pagar a tu equipo' : `Pendiente por pagar a ${vendedores[0]==='ximenita'?'Xime':vendedores[0]}`) : 'Tu pendiente por cobrar';
+  const heroSub = todoAlCorriente ? 'Al corriente — nada pendiente ✓' : `${Math.round(pctPagado)}% de lo generado ya está pagado`;
+
   const heroHTML = `
-    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;">
-      ${MI_ROL==='admin' ? `<div class="metric" style="padding:18px;">
-        <div class="metric-label">Ingresos totales</div>
-        <div style="font-family:'Space Grotesk';font-size:26px;font-weight:700;">$${total.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
-      </div>` : ''}
-      <div class="earn-hero" style="${MI_ROL!=='admin'?'grid-column:1/-1;':''}">
-        <div class="lbl">Tu ganancia (clientes activos)</div>
-        <div class="big">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
-        <div style="font-size:12px;color:#c4b8f9;margin-top:4px;">${misClientes} ventas propias activas</div>
-      </div>
-    </div>`;
-
-  const comisionesHTML = MI_ROL==='admin' ? `
-    <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">Comisiones por vendedor</div>
-    <div style="display:flex;flex-direction:column;gap:8px;">
-      ${vendedores.map(v=>{
-        const acum=resumen[v].total;
-        const pag=pagado[v];
-        const pend=acum-pag;
-        const pct = COMISIONES[v] !== undefined ? COMISIONES[v] : 100;
-        const hist = historialPorVendedor[v];
-        const histId = 'hist-'+v;
-        return `
-        <div class="vendor-row" style="flex-direction:column;align-items:stretch;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-            <div>
-              <div class="vendor-name" style="text-transform:capitalize;">${v==='ximenita'?'Xime':v}</div>
-              <div class="vendor-pct">${resumen[v].clientes} clientes activos · ${pct}% comisión${resumen[v].ventasUnicas>0?` · ${resumen[v].ventasUnicas} venta${resumen[v].ventasUnicas!==1?'s':''} única${resumen[v].ventasUnicas!==1?'s':''} (50/50)`:''}${resumen[v].caidos>0?` · <span style="color:var(--red);">${resumen[v].caidos} vencido${resumen[v].caidos!==1?'s':''} (no cuenta${resumen[v].caidos!==1?'n':''})</span>`:''}</div>
-            </div>
-            <div style="display:flex;gap:6px;">
-              <button onclick="abrirModalVentaUnica('${v}')" class="btn-primary" style="width:auto;margin-top:0;padding:8px 10px;font-size:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:none;" title="Registrar venta única">🎟️</button>
-              <button onclick="abrirModalPago('${v}',${pend.toFixed(2)})" class="btn-primary" style="width:auto;margin-top:0;padding:8px 14px;font-size:12px;">Registrar pago</button>
-            </div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
-            <div class="cuenta-info-item">
-              <div class="cuenta-info-label">Acumulado</div>
-              <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:var(--text);">$${acum.toFixed(2)}</div>
-            </div>
-            <div class="cuenta-info-item">
-              <div class="cuenta-info-label">Pagado</div>
-              <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:var(--green);">$${pag.toFixed(2)}</div>
-            </div>
-            <div class="cuenta-info-item">
-              <div class="cuenta-info-label">Pendiente</div>
-              <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:${pend>0.001?'var(--amber)':'var(--green)'};">$${pend.toFixed(2)}</div>
-            </div>
-          </div>
-          ${hist.length ? `
-          <div style="cursor:pointer;font-size:11.5px;color:var(--violet);font-weight:600;" onclick="document.getElementById('${histId}').classList.toggle('open')">📜 Ver historial de pagos (${hist.length}) ▾</div>
-          <div class="cuenta-body" id="${histId}" style="margin-top:6px;border-top:none;">
-            ${hist.map(p => `
-              <div class="slot-row">
-                <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
-                <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||p.concepto||''}</div>
-                <div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);font-size:13px;">$${parseFloat(p.monto||0).toFixed(2)}</div>
-              </div>`).join('')}
-          </div>` : `<div style="font-size:11.5px;color:var(--text3);">Sin pagos registrados aún.</div>`}
-          ${(() => { const vu = todasVentasUnicas.filter(x=>(x.vendedor||'').toLowerCase()===v); const vuId='vu-hist-'+v;
-            return vu.length ? `
-          <div style="cursor:pointer;font-size:11.5px;color:var(--amber);font-weight:600;margin-top:8px;" onclick="document.getElementById('${vuId}').classList.toggle('open')">🎟️ Ver ventas únicas (${vu.length}) ▾</div>
-          <div class="cuenta-body" id="${vuId}" style="margin-top:6px;border-top:none;">
-            ${vu.map(p => { const total=parseFloat(p.monto||0); return `
-              <div class="slot-row">
-                <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
-                <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||'Venta única'} · total $${total.toFixed(2)}</div>
-                <div style="font-family:'Space Grotesk';font-weight:700;color:var(--amber);font-size:13px;">$${(total/2).toFixed(2)}</div>
-              </div>`; }).join('')}
-          </div>` : ''; })()}
-        </div>`;
-      }).join('')}
-    </div>` : `
-    <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">Tu comisión</div>
-    ${vendedores.map(v=>{
-      const acum=resumen[v].total, pag=pagado[v], pend=acum-pag;
-      const hist = historialPorVendedor[v];
-      const histId = 'hist-'+v;
-      return `<div class="vendor-row" style="flex-direction:column;align-items:stretch;">
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
-          <div class="cuenta-info-item"><div class="cuenta-info-label">Acumulado</div><div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;">$${acum.toFixed(2)}</div></div>
-          <div class="cuenta-info-item"><div class="cuenta-info-label">Pagado</div><div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:var(--green);">$${pag.toFixed(2)}</div></div>
-          <div class="cuenta-info-item"><div class="cuenta-info-label">Pendiente</div><div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:${pend>0.001?'var(--amber)':'var(--green)'};">$${pend.toFixed(2)}</div></div>
+  <div class="earn-wrap">
+    <div class="earn-top-grid">
+      <div class="pending-hero${todoAlCorriente?' all-paid':''}">
+        <div class="ring-wrap">
+          <svg width="92" height="92" viewBox="0 0 92 92">
+            <defs><linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="${todoAlCorriente?'#34d399':'#8b5cf6'}"/>
+              <stop offset="100%" stop-color="${todoAlCorriente?'#34d399':'#6366f1'}"/>
+            </linearGradient></defs>
+            <circle class="ring-track" cx="46" cy="46" r="${ringR}"/>
+            <circle class="ring-progress" cx="46" cy="46" r="${ringR}" stroke-dasharray="${ringC}" stroke-dashoffset="${ringOffset}"/>
+          </svg>
+          <div class="ring-center">${Math.round(pctPagado)}%</div>
         </div>
-        ${resumen[v].caidos>0?`<div style="font-size:11.5px;color:var(--red);margin-bottom:8px;">⚠️ ${resumen[v].caidos} cliente${resumen[v].caidos!==1?'s':''} vencido${resumen[v].caidos!==1?'s':''} — no cuenta${resumen[v].caidos!==1?'n':''} hasta que renueve${resumen[v].caidos!==1?'n':''}</div>`:''}
-        ${resumen[v].ventasUnicas>0?`<div style="font-size:11.5px;color:var(--amber);margin-bottom:8px;">🎟️ ${resumen[v].ventasUnicas} venta${resumen[v].ventasUnicas!==1?'s':''} única${resumen[v].ventasUnicas!==1?'s':''} incluida${resumen[v].ventasUnicas!==1?'s':''} (50/50)</div>`:''}
-        ${hist.length ? `
-        <div style="cursor:pointer;font-size:11.5px;color:var(--violet);font-weight:600;" onclick="document.getElementById('${histId}').classList.toggle('open')">📜 Ver historial de pagos (${hist.length}) ▾</div>
-        <div class="cuenta-body" id="${histId}" style="margin-top:6px;border-top:none;">
-          ${hist.map(p => `
-            <div class="slot-row">
-              <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
-              <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||p.concepto||''}</div>
-              <div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);font-size:13px;">$${parseFloat(p.monto||0).toFixed(2)}</div>
-            </div>`).join('')}
-        </div>` : `<div style="font-size:11.5px;color:var(--text3);">Sin pagos registrados aún.</div>`}
-        ${(() => { const vu = todasVentasUnicas.filter(x=>(x.vendedor||'').toLowerCase()===v); const vuId='vu-hist-'+v;
-          return vu.length ? `
-        <div style="cursor:pointer;font-size:11.5px;color:var(--amber);font-weight:600;margin-top:8px;" onclick="document.getElementById('${vuId}').classList.toggle('open')">🎟️ Ver ventas únicas (${vu.length}) ▾</div>
-        <div class="cuenta-body" id="${vuId}" style="margin-top:6px;border-top:none;">
-          ${vu.map(p => { const total=parseFloat(p.monto||0); return `
-            <div class="slot-row">
-              <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
-              <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||'Venta única'} · total $${total.toFixed(2)}</div>
-              <div style="font-family:'Space Grotesk';font-weight:700;color:var(--amber);font-size:13px;">$${(total/2).toFixed(2)}</div>
-            </div>`; }).join('')}
-        </div>` : ''; })()}
-      </div>`;
-    }).join('')}`;
+        <div>
+          <div class="lbl">${heroLabel}</div>
+          <div class="big">$${pendienteTotal.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
+          <div class="sub">${heroSub}</div>
+        </div>
+      </div>
+      ${MI_ROL==='admin' ? `
+      <div class="mini-stat">
+        <div class="lbl">Ingresos totales del negocio</div>
+        <div class="val">$${total.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
+      </div>` : `
+      <div class="mini-stat">
+        <div class="lbl">Tu ganancia (clientes activos)</div>
+        <div class="val" style="color:var(--violet2);">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
+      </div>`}
+    </div>
+    ${MI_ROL==='admin' ? `<div class="mini-stat" style="flex-direction:row;align-items:center;justify-content:space-between;">
+      <div><div class="lbl">Tu ganancia propia (clientes activos)</div><div class="val" style="margin-top:3px;">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div></div>
+      <div style="font-size:11.5px;color:var(--text2);">${misClientes} ventas propias activas</div>
+    </div>` : ''}
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      ${vendedores.map(v => vendorCardHTML(v, resumen[v], pagado[v], historialPorVendedor[v])).join('')}
+    </div>
+  </div>`;
 
-  document.getElementById('ganancias-content').innerHTML = heroHTML + comisionesHTML;
+  document.getElementById('ganancias-content').innerHTML = heroHTML;
+}
+
+// Tarjeta individual de vendedor: mini-anillo de su propio avance + detalle colapsable.
+// Misma estructura para admin (ve botones de acción) y vendedor (solo lectura de lo suyo).
+function vendorCardHTML(v, r, pag, hist) {
+  const acum = r.total, pend = acum - pag;
+  const pct = COMISIONES[v] !== undefined ? COMISIONES[v] : 100;
+  const pctPagadoV = acum > 0.001 ? Math.max(0, Math.min(100, (pag/acum)*100)) : 100;
+  const ringR = 15, ringC = 2*Math.PI*ringR;
+  const ringOffset = ringC - (pctPagadoV/100)*ringC;
+  const alCorriente = pend <= 0.001;
+  const histId = 'hist-'+v, vuId = 'vu-hist-'+v;
+  const vu = todasVentasUnicas.filter(x=>(x.vendedor||'').toLowerCase()===v);
+  const nombreVisible = v==='ximenita' ? 'Xime' : v;
+
+  const metaParts = [`${r.clientes} cliente${r.clientes!==1?'s':''} activo${r.clientes!==1?'s':''}`, `${pct}% comisión`];
+  if (r.ventasUnicas>0) metaParts.push(`${r.ventasUnicas} venta${r.ventasUnicas!==1?'s':''} única${r.ventasUnicas!==1?'s':''}`);
+
+  return `
+  <div class="vendor-card">
+    <div class="vendor-card-head">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div class="vendor-mini-ring">
+          <svg width="38" height="38" viewBox="0 0 38 38">
+            <circle cx="19" cy="19" r="${ringR}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5"/>
+            <circle cx="19" cy="19" r="${ringR}" fill="none" stroke="${alCorriente?'#34d399':'#8b5cf6'}" stroke-width="5" stroke-linecap="round"
+              stroke-dasharray="${ringC}" stroke-dashoffset="${ringOffset}" transform="rotate(-90 19 19)" style="transition:stroke-dashoffset 0.6s var(--ease);"/>
+          </svg>
+        </div>
+        <div>
+          <div class="vendor-card-name">${nombreVisible}</div>
+          <div class="vendor-card-meta">${metaParts.join(' · ')}</div>
+        </div>
+      </div>
+      ${MI_ROL==='admin' ? `
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button onclick="abrirModalVentaUnica('${v}')" class="btn-primary" style="width:auto;margin-top:0;padding:8px 10px;font-size:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:none;" title="Registrar venta única">🎟️</button>
+        <button onclick="abrirModalPago('${v}',${pend.toFixed(2)})" class="btn-primary" style="width:auto;margin-top:0;padding:8px 14px;font-size:12px;">Pagar</button>
+      </div>` : ''}
+    </div>
+    <div class="vendor-stat-row">
+      <div class="cuenta-info-item">
+        <div class="cuenta-info-label">Acumulado</div>
+        <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:var(--text);">$${acum.toFixed(2)}</div>
+      </div>
+      <div class="cuenta-info-item">
+        <div class="cuenta-info-label">Pagado</div>
+        <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:var(--green);">$${pag.toFixed(2)}</div>
+      </div>
+      <div class="cuenta-info-item">
+        <div class="cuenta-info-label">Pendiente</div>
+        <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:${pend>0.001?'var(--amber)':'var(--green)'};">$${pend.toFixed(2)}</div>
+      </div>
+    </div>
+    ${r.caidos>0?`<div class="spark-line warn">⚠️ ${r.caidos} cliente${r.caidos!==1?'s':''} vencido${r.caidos!==1?'s':''} — no cuenta${r.caidos!==1?'n':''} hasta que renueve${r.caidos!==1?'n':''}</div>`:''}
+    <div class="disclosure" onclick="this.classList.toggle('open');document.getElementById('${histId}').classList.toggle('open')" style="color:var(--violet);">
+      <span class="chev">▾</span> 📜 Historial de pagos (${hist.length})
+    </div>
+    <div class="cuenta-body" id="${histId}" style="margin-top:2px;border-top:none;">
+      ${hist.length ? hist.map(p => `
+        <div class="slot-row">
+          <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
+          <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||p.concepto||''}</div>
+          <div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);font-size:13px;">$${parseFloat(p.monto||0).toFixed(2)}</div>
+        </div>`).join('') : `<div style="font-size:11.5px;color:var(--text3);padding:6px 0;">Sin pagos registrados aún.</div>`}
+    </div>
+    ${vu.length ? `
+    <div class="disclosure" onclick="this.classList.toggle('open');document.getElementById('${vuId}').classList.toggle('open')" style="color:var(--amber);">
+      <span class="chev">▾</span> 🎟️ Ventas únicas (${vu.length})
+    </div>
+    <div class="cuenta-body" id="${vuId}" style="margin-top:2px;border-top:none;">
+      ${vu.map(p => { const t=parseFloat(p.monto||0); return `
+        <div class="slot-row">
+          <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
+          <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||'Venta única'} · total $${t.toFixed(2)}</div>
+          <div style="font-family:'Space Grotesk';font-weight:700;color:var(--amber);font-size:13px;">$${(t/2).toFixed(2)}</div>
+        </div>`; }).join('')}
+    </div>` : ''}
+  </div>`;
 }
 
 function cargarPagos() {
