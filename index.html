@@ -758,9 +758,11 @@ body {
         <input class="form-input" id="e-precio" readonly>
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Cuenta asignada</label>
-      <input class="form-input" id="e-cuenta" placeholder="correo@cuenta.com">
+    <div class="form-group" id="e-cuentas-container">
+      <label class="form-label">Cuenta(s) asignada(s)</label>
+      <div id="e-cuentas-selects">
+        <div style="font-size:13px;color:var(--text3);">Selecciona un paquete para ver cuentas disponibles...</div>
+      </div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -927,7 +929,7 @@ let filtroPlatActual = 'TODAS';
 
 const PLAT_ICONS = {
   'NETFLIX':'🎬','SPOTIFY':'🎵','YOUTUBE PREM':'▶️','YOUTUBE':'▶️',
-  'HBO':'📺','DISNEY':'🏰','PARAMOUNT':'⭐','CRUNCHYROLL':'⚡'
+  'HBO':'📺','DISNEY':'🏰','PARAMOUNT':'⭐','CRUNCHYROLL':'⚡','VIX':'🎞️'
 };
 
 let todosClientes = [];
@@ -1514,21 +1516,34 @@ function actualizarPrecio() {
   cargarCuentasDisponibles(p[0]);
 }
 
-function cargarCuentasDisponibles(paquete) {
+// targetId: dónde pintar los selects ('n-cuentas-selects' o 'e-cuentas-selects')
+// selectClass: clase CSS para identificar los selects generados ('n-cuenta-plat' o 'e-cuenta-plat')
+// cuentasActuales: array de correos ya asignados a ESTE cliente (solo aplica al editar) —
+// esas cuentas se muestran con un slot "extra" disponible (el que ya ocupa él) y quedan
+// preseleccionadas, en vez de aparecer como sin disponibilidad si están llenas.
+function cargarCuentasDisponibles(paquete, targetId, selectClass, cuentasActuales) {
+  targetId = targetId || 'n-cuentas-selects';
+  selectClass = selectClass || 'n-cuenta-plat';
+  cuentasActuales = cuentasActuales || [];
+
   const plataformas = detectarPlataformas(paquete);
-  const container = document.getElementById('n-cuentas-selects');
+  const container = document.getElementById(targetId);
 
   if (!todasCuentas.length) {
     container.innerHTML = '<div style="font-size:13px;color:var(--text3);">Cargando cuentas...</div>';
-    setTimeout(() => cargarCuentasDisponibles(paquete), 1000);
+    setTimeout(() => cargarCuentasDisponibles(paquete, targetId, selectClass, cuentasActuales), 1000);
     return;
   }
 
   let html = '';
   plataformas.forEach(plat => {
     const cuentasPlat = todasCuentas.filter(c => c.plataforma === plat).map(cuenta => {
-      const libres = cuenta.slots.slice(0, cuenta.slotsTotal).filter(s => !s || s.trim() === '').length;
-      return { ...cuenta, libres };
+      const yaAsignadaAqui = cuentasActuales.includes(cuenta.correo);
+      let libres = cuenta.slots.slice(0, cuenta.slotsTotal).filter(s => !s || s.trim() === '').length;
+      // Si este cliente ya ocupa un slot en esta cuenta, ese slot cuenta como
+      // "disponible para él" aunque la cuenta esté llena para los demás.
+      if (yaAsignadaAqui) libres += 1;
+      return { ...cuenta, libres, yaAsignadaAqui };
     }).filter(c => c.libres > 0);
 
     html += `<div style="margin-bottom:10px;">
@@ -1537,9 +1552,10 @@ function cargarCuentasDisponibles(paquete) {
     if (!cuentasPlat.length) {
       html += `<div style="font-size:12px;color:var(--red);padding:9px;background:var(--red-bg);border-radius:10px;">⚠️ Sin slots disponibles en ${plat}</div>`;
     } else {
-      html += `<select class="form-select n-cuenta-plat" data-plat="${plat}">
+      const correoPreseleccionado = cuentasActuales.find(correo => cuentasPlat.some(c => c.correo === correo)) || '';
+      html += `<select class="form-select ${selectClass}" data-plat="${plat}">
         <option value="">Selecciona cuenta de ${plat}...</option>
-        ${cuentasPlat.map(c => `<option value="${c.correo}">${c.nombre} — ${c.correo} (${c.libres} libre${c.libres!==1?'s':''})</option>`).join('')}
+        ${cuentasPlat.map(c => `<option value="${c.correo}" ${c.correo===correoPreseleccionado?'selected':''}>${c.nombre} — ${c.correo} (${c.libres} libre${c.libres!==1?'s':''})${c.yaAsignadaAqui?' · ya asignada':''}</option>`).join('')}
       </select>`;
     }
     html += `</div>`;
@@ -1624,6 +1640,7 @@ function detectarPlataformas(paquete) {
   if (p.includes('hbo')) plats.push('HBO');
   if (p.includes('paramount')) plats.push('PARAMOUNT');
   if (p.includes('crunchy') || p.includes('crunchyroll')) plats.push('CRUNCHYROLL');
+  if (p.includes('vix')) plats.push('VIX');
   if (!plats.length) plats.push('NETFLIX');
   return [...new Set(plats)];
 }
@@ -2306,6 +2323,7 @@ function renderConfig() {
               <option>HBO</option>
               <option>PARAMOUNT</option>
               <option>CRUNCHYROLL</option>
+              <option>VIX</option>
             </select>
           </div>
           <div class="form-group">
@@ -2430,6 +2448,35 @@ function sincronizarComisionesServidor() {
     .catch(()=>{ /* si falla, nos quedamos con lo de localStorage */ });
 }
 
+// Trae el catálogo de combos real desde la hoja 'combos' (fuente de
+// verdad) y lo fusiona sobre el catálogo fijo + lo que haya en
+// localStorage. Se llama al iniciar sesión, así que un combo creado desde
+// cualquier dispositivo (el tuyo o el de un vendedor con permiso) aparece
+// igual para todos, no solo en el navegador donde se creó.
+function sincronizarCombosServidor() {
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'combos',key:APP_KEY})})
+    .then(r=>r.json())
+    .then(res=>{
+      const filas = res.rows||[];
+      if (!filas.length) return;
+      filas.forEach(f=>{
+        const nombre = f['nombre'];
+        const precio = parseFloat(f['precio']);
+        const amigo = parseFloat(f['ganancia_amigo']);
+        const neta = parseFloat(f['ganancia_neta']);
+        if (nombre && !isNaN(precio)) {
+          PAQUETES_GANANCIA[nombre] = { precio, gananciaAmigo: isNaN(amigo)?0:amigo, gananciaNeta: isNaN(neta)?0:neta };
+        }
+      });
+      guardarConfigLocal();
+      // Si alguna sección que muestra combos ya está abierta, refrescar
+      // para que el catálogo nuevo aparezca sin necesitar recargar la página.
+      if (!document.getElementById('sec-catalogo').classList.contains('section-hidden')) renderCatalogo();
+      if (document.getElementById('config-content').innerHTML) renderConfig();
+    })
+    .catch(()=>{ /* si falla, nos quedamos con el catálogo fijo + localStorage */ });
+}
+
 // ===== PENDIENTE 2: Agregar combos nuevos desde Configuración =====
 function guardarNuevoCombo() {
   const nombre = document.getElementById('ncb-nombre').value.trim();
@@ -2512,7 +2559,6 @@ function abrirEditar(id) {
   document.getElementById('e-id').value = c.id;
   document.getElementById('e-cliente').value = c.cliente;
   document.getElementById('e-contacto').value = c.contacto;
-  document.getElementById('e-cuenta').value = c.cuenta;
   document.getElementById('e-vendedor').value = c.vendedor;
   document.getElementById('e-pago').value = c.pago || 'PAGADO';
   document.getElementById('e-estado').value = c.estado_raw || 'ACTIVO';
@@ -2523,12 +2569,17 @@ function abrirEditar(id) {
     if (p.length === 3) document.getElementById('e-inicio').value = `${p[2]}-${p[1]}-${p[0]}`;
   }
   const paqueteOpt = [...document.getElementById('e-paquete').options].find(o => o.value.startsWith(c.paquete+'|'));
+  // Cuentas que el cliente ya tiene asignadas, tal como están guardadas en
+  // el Sheet (separadas por ", "), para preseleccionarlas en el selector.
+  const cuentasActuales = (c.cuenta||'').split(',').map(s=>s.trim()).filter(Boolean);
   if (paqueteOpt) {
     document.getElementById('e-paquete').value = paqueteOpt.value;
     document.getElementById('e-precio').value = '$' + paqueteOpt.value.split('|')[1];
+    cargarCuentasDisponibles(c.paquete, 'e-cuentas-selects', 'e-cuenta-plat', cuentasActuales);
   } else {
     document.getElementById('e-paquete').value = '';
     document.getElementById('e-precio').value = c.precio ? '$'+c.precio : '';
+    document.getElementById('e-cuentas-selects').innerHTML = `<div style="font-size:13px;color:var(--text3);">Paquete no reconocido — cuenta actual: ${c.cuenta||'ninguna'}. Selecciona un paquete válido para reasignar.</div>`;
   }
   document.getElementById('editar-status').innerHTML = '';
   document.getElementById('btn-editar').disabled = false;
@@ -2538,8 +2589,17 @@ function abrirEditar(id) {
 
 function actualizarPrecioEditar() {
   const sel = document.getElementById('e-paquete').value;
-  if (!sel) { document.getElementById('e-precio').value = ''; return; }
-  document.getElementById('e-precio').value = '$' + sel.split('|')[1];
+  if (!sel) {
+    document.getElementById('e-precio').value = '';
+    document.getElementById('e-cuentas-selects').innerHTML = '<div style="font-size:13px;color:var(--text3);">Selecciona un paquete para ver cuentas disponibles...</div>';
+    return;
+  }
+  const partes = sel.split('|');
+  document.getElementById('e-precio').value = '$' + partes[1];
+  // Si el paquete cambió a uno distinto al que tenía el cliente, las cuentas
+  // viejas ya no aplican necesariamente — recargamos sin preselección y que
+  // el vendedor elija de nuevo según la nueva plataforma.
+  cargarCuentasDisponibles(partes[0], 'e-cuentas-selects', 'e-cuenta-plat', []);
 }
 
 function calcularRenovacionEditar() {
@@ -2582,7 +2642,7 @@ function guardarEdicion() {
     contacto: document.getElementById('e-contacto').value.trim(),
     paquete: sel ? sel.split('|')[0] : '',
     precio: sel ? sel.split('|')[1] : document.getElementById('e-precio').value.replace('$',''),
-    cuenta: document.getElementById('e-cuenta').value.trim(),
+    cuenta: Array.from(document.querySelectorAll('.e-cuenta-plat')).map(s=>s.value).filter(Boolean).join(', '),
     inicio: document.getElementById('e-inicio').value ? new Date(document.getElementById('e-inicio').value).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}) : '',
     renovacion: document.getElementById('e-renovacion').value,
     vendedor: vendedorSel,
@@ -2712,6 +2772,7 @@ function hacerLogin() {
         cargarDatos();
         cargarCuentasBackground();
         sincronizarComisionesServidor();
+        sincronizarCombosServidor();
       } else {
         err.textContent = res.message || 'Usuario o clave incorrectos.';
         err.style.display='block';
@@ -2829,6 +2890,7 @@ window.addEventListener('resize', () => {
         cargarDatos();
         cargarCuentasBackground();
         sincronizarComisionesServidor();
+        sincronizarCombosServidor();
       } else {
         try { localStorage.removeItem('app_key'); } catch(e){}
       }
