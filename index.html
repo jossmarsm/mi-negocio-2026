@@ -1213,13 +1213,14 @@ function renderHistorialMensual() {
     const [y,m] = mesStr.split('-');
     return (nombresMes[parseInt(m)]||mesStr) + ' ' + y;
   }
-  const nombreVendedor = v => v==='ximenita' ? 'Xime' : v.charAt(0).toUpperCase()+v.slice(1);
+  const nombreVendedor = v => v==='ximenita' ? 'Xime' : (v==='yo' ? 'Tú' : v.charAt(0).toUpperCase()+v.slice(1));
 
   cont.innerHTML = meses.map((mes, i) => {
     const filas = porMes[mes];
     const totalGenerado = filas.reduce((s,f)=>s+(parseFloat(f['generado_mes'])||0),0);
     const totalPagado = filas.reduce((s,f)=>s+(parseFloat(f['pagado_mes'])||0),0);
-    const totalPendiente = filas.reduce((s,f)=>s+(parseFloat(f['pendiente_acumulado'])||0),0);
+    // 'yo' no tiene pendiente (nunca te pagas a ti mismo) — se excluye de este total.
+    const totalPendiente = filas.filter(f=>f['vendedor']!=='yo').reduce((s,f)=>s+(parseFloat(f['pendiente_acumulado'])||0),0);
     const bodyId = 'corte-mes-'+mes;
     return `<div class="cuenta-card" style="animation-delay:${Math.min(i*0.04,0.3)}s;">
       <div class="cuenta-header" onclick="toggleCuenta('${bodyId}')">
@@ -1232,15 +1233,18 @@ function renderHistorialMensual() {
         </div>
       </div>
       <div class="cuenta-body" id="${bodyId}">
-        ${filas.map(f => `
+        ${filas.map(f => {
+          const esYo = f['vendedor']==='yo';
+          return `
           <div class="vendor-stat-row" style="margin-bottom:10px;">
             <div class="cuenta-info-item" style="grid-column:1/-1;margin-bottom:4px;">
-              <div class="cuenta-info-label" style="text-transform:capitalize;font-weight:700;color:var(--text);">${nombreVendedor(f['vendedor'])}</div>
+              <div class="cuenta-info-label" style="text-transform:capitalize;font-weight:700;color:var(--text);">${nombreVendedor(f['vendedor'])}${esYo?' · ganancia propia':''}</div>
             </div>
             <div class="cuenta-info-item">
               <div class="cuenta-info-label">Generado</div>
               <div style="font-family:'Space Grotesk';font-size:14px;font-weight:700;color:var(--text);">$${parseFloat(f['generado_mes']||0).toFixed(2)}</div>
             </div>
+            ${esYo ? '' : `
             <div class="cuenta-info-item">
               <div class="cuenta-info-label">Pagado</div>
               <div style="font-family:'Space Grotesk';font-size:14px;font-weight:700;color:var(--green);">$${parseFloat(f['pagado_mes']||0).toFixed(2)}</div>
@@ -1248,8 +1252,9 @@ function renderHistorialMensual() {
             <div class="cuenta-info-item">
               <div class="cuenta-info-label">Pendiente acum.</div>
               <div style="font-family:'Space Grotesk';font-size:14px;font-weight:700;color:${parseFloat(f['pendiente_acumulado']||0)>0.001?'var(--amber)':'var(--green)'};">$${parseFloat(f['pendiente_acumulado']||0).toFixed(2)}</div>
-            </div>
-          </div>`).join('')}
+            </div>`}
+          </div>`;
+        }).join('')}
         <div style="font-size:10.5px;color:var(--text3);margin-top:4px;">Corte generado: ${filas[0]['fecha_corte']||'—'}</div>
       </div>
     </div>`;
@@ -2036,13 +2041,15 @@ function renderGanancias() {
     const L = saldoLedger_(v);
     resumen[v] = { abonado:L.abonado, pagado:L.pagado, saldo:L.saldo, clientes:0, ventasUnicas:0 };
   });
-  let misGanancias=0, misClientes=0;
+  let misGanancias=0, misClientes=0, misClientesDirectos=0;
   todosClientes.forEach(c=>{
     const activo = c.estado_raw !== 'ARCHIVADO' && c.estado !== 'vencido';
     const g=parseFloat(c.ganancia)||0;
     const v=c.vendedor.toLowerCase();
-    if(v==='yo'){ if(activo){misGanancias+=g;misClientes++;} }
+    if(v==='yo'){ if(activo){misGanancias+=g;misClientes++;misClientesDirectos++;} }
     else if(resumen[v]!==undefined){
+      // g aquí YA es tu ganancia_neta de esta venta (no la comisión del vendedor) —
+      // se calcula así desde que se guarda el cliente (ver guardarCliente/renovarCliente).
       if(activo){ resumen[v].clientes++; misGanancias+=g; misClientes++; }
     }
   });
@@ -2109,8 +2116,8 @@ function renderGanancias() {
       </div>`}
     </div>
     ${MI_ROL==='admin' ? `<div class="mini-stat" style="flex-direction:row;align-items:center;justify-content:space-between;">
-      <div><div class="lbl">Tu ganancia propia (clientes activos)</div><div class="val" style="margin-top:3px;">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div></div>
-      <div style="font-size:11.5px;color:var(--text2);">${misClientes} ventas propias activas</div>
+      <div><div class="lbl">Tu ganancia total del negocio (clientes activos)</div><div class="val" style="margin-top:3px;">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div></div>
+      <div style="font-size:11.5px;color:var(--text2);text-align:right;">${misClientesDirectos} propias directas<br>${misClientes-misClientesDirectos} de tus vendedores</div>
     </div>` : ''}
     <div style="display:flex;flex-direction:column;gap:10px;">
       ${vendedores.map(v => vendorCardHTML(v, resumen[v], historialPorVendedor[v])).join('')}
