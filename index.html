@@ -879,6 +879,57 @@ body {
   </div>
 </div>
 
+<!-- MODAL RENOVAR CLIENTE -->
+<div class="modal-overlay" id="modal-renovar">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <div class="modal-title">🔁 Renovar cliente</div>
+      <button class="modal-close" onclick="cerrarModal('modal-renovar')">✕</button>
+    </div>
+    <div id="renovar-status"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:14px;font-weight:700;" id="renovar-nombre">—</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-top:2px;" id="renovar-paquete">—</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Combo de este ciclo</label>
+      <select class="form-select" id="renovar-nuevo-paquete" onchange="calcularRenovacionRenovar()">
+        <option value="">Mantener el mismo combo</option>
+      </select>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">Si el cliente mejora o cambia de combo, elígelo aquí y la comisión se calcula con el nuevo.</div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Nueva fecha de inicio *</label>
+        <input class="form-input" type="date" id="renovar-inicio" onchange="calcularRenovacionRenovar()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nueva renovación</label>
+        <input class="form-input" id="renovar-fecha-renovacion" readonly>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Estado de pago</label>
+      <select class="form-select" id="renovar-pago">
+        <option value="PAGADO">PAGADO</option>
+        <option value="PENDIENTE">PENDIENTE</option>
+      </select>
+    </div>
+    <div class="ganancia-box">
+      <div>
+        <div class="ganancia-label">Ganancia ya acumulada</div>
+        <div class="ganancia-value" style="font-size:16px;" id="renovar-ganancia-previa">$0</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="ganancia-label">+ Esta renovación</div>
+        <div class="ganancia-value" id="renovar-ganancia-nueva">$0</div>
+      </div>
+    </div>
+    <input type="hidden" id="renovar-id">
+    <button class="btn-primary" id="btn-renovar" onclick="guardarRenovacion()" style="background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 18px -4px rgba(52,211,153,0.5);">Confirmar renovación</button>
+  </div>
+</div>
+
 <!-- MODAL CONFIRMAR ELIMINAR CUENTA -->
 <div class="modal-overlay" id="modal-confirmar">
   <div class="modal" style="max-width:380px;">
@@ -917,6 +968,7 @@ const LINK_BIENVENIDA = 'https://www.facebook.com/share/p/1LpUAnuuGm/';
 
 let todosPagos = [];
 let todasVentasUnicas = [];
+let todasComisiones = []; // libro de movimientos de comisiones (hoja 'comisiones')
 let APP_KEY = '';
 let ultimoClienteGuardado = null; // datos del último cliente recién registrado, para el botón de bienvenida
 let MI_VENDEDOR = '';
@@ -1109,7 +1161,7 @@ function mostrarSeccion(sec, btn) {
   btn.classList.add('active');
   if (sec==='cuentas') cargarCuentas();
   if (sec==='catalogo') cargarCatalogo();
-  if (sec==='ganancias') { Promise.all([cargarPagos(), cargarVentasUnicas()]).then(renderGanancias); }
+  if (sec==='ganancias') { Promise.all([cargarPagos(), cargarVentasUnicas(), cargarLedger()]).then(renderGanancias); }
   if (sec==='config') renderConfig();
 }
 
@@ -1449,7 +1501,8 @@ function verDetalle(id) {
   const esArchivado = c.estado_raw==='ARCHIVADO';
   document.getElementById('d-contenido').innerHTML += esArchivado ? `
     <button onclick="reactivarCliente('${c.id}')" class="btn-secondary green" style="margin-top:4px;">✅ Reactivar cliente</button>` : `
-    <button onclick="abrirEditar('${c.id}')" class="btn-primary" style="margin-top:4px;">✏️ Editar cliente</button>
+    <button onclick="abrirRenovar('${c.id}')" class="btn-primary" style="margin-top:4px;background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 18px -4px rgba(52,211,153,0.5);">🔁 Renovar cliente</button>
+    <button onclick="abrirEditar('${c.id}')" class="btn-primary" style="margin-top:8px;">✏️ Editar cliente</button>
     <button onclick="confirmarArchivar('${c.id}')" class="btn-secondary">Archivar cliente</button>`;
   document.getElementById('modal-detalle').classList.add('open');
 }
@@ -1976,58 +2029,46 @@ function abrirModalNuevaCuenta() {
 function renderGanancias() {
   const vendedores = MI_ROL==='admin' ? ['ximenita','saito'] : [MI_VENDEDOR];
   const resumen = {};
-  vendedores.forEach(v=>resumen[v]={total:0,clientes:0,caidos:0,ventasUnicas:0});
+  // El DINERO de cada vendedor sale del libro (todasComisiones), NO de re-sumar
+  // clientes activos. Vencer/archivar ya no toca un peso. De los clientes solo
+  // sacamos el conteo informativo de "clientes activos" para la tarjeta.
+  vendedores.forEach(v=>{
+    const L = saldoLedger_(v);
+    resumen[v] = { abonado:L.abonado, pagado:L.pagado, saldo:L.saldo, clientes:0, ventasUnicas:0 };
+  });
   let misGanancias=0, misClientes=0;
   todosClientes.forEach(c=>{
-    // Un cliente ARCHIVADO o VENCIDO no debe seguir generando comisión activa.
-    // En cuanto vuelve a estar activo (renueva), automáticamente vuelve a sumar.
-    const cuentaParaComision = c.estado_raw !== 'ARCHIVADO' && c.estado !== 'vencido';
+    const activo = c.estado_raw !== 'ARCHIVADO' && c.estado !== 'vencido';
     const g=parseFloat(c.ganancia)||0;
     const v=c.vendedor.toLowerCase();
-    if(v==='yo'){ if(cuentaParaComision){misGanancias+=g;misClientes++;} }
+    if(v==='yo'){ if(activo){misGanancias+=g;misClientes++;} }
     else if(resumen[v]!==undefined){
-      if (!cuentaParaComision) { resumen[v].caidos++; return; }
-      const paqueteData = PAQUETES_GANANCIA[c.paquete];
-      const pct = COMISIONES[v] !== undefined ? COMISIONES[v] : 100;
-      const comision = paqueteData ? paqueteData.gananciaAmigo * (pct/100) : 0;
-      resumen[v].total+=comision; resumen[v].clientes++;
-      misGanancias+=g; misClientes++;
+      if(activo){ resumen[v].clientes++; misGanancias+=g; misClientes++; }
     }
   });
-  // Ventas únicas: monto suelto repartido 50/50, sin fecha de renovación ni paquete.
-  // Se suman directo al acumulado del vendedor (no se "caen" por vencimiento, son de una sola vez).
+  // Conteo informativo de ventas únicas por vendedor (para la meta de la tarjeta).
   todasVentasUnicas.forEach(vu=>{
     const v=(vu.vendedor||'').toLowerCase();
-    const monto=parseFloat(vu.monto)||0;
-    const mitad=monto/2;
-    if(resumen[v]!==undefined){
-      resumen[v].total+=mitad; resumen[v].ventasUnicas++;
-      misGanancias+=mitad;
-    }
+    if(resumen[v]!==undefined){ resumen[v].ventasUnicas++; }
   });
-  const pagado={};
+  // Historial de pagos para mostrar (la hoja 'pagos' sigue siendo el registro visible).
   const historialPorVendedor={};
-  vendedores.forEach(v=>{pagado[v]=0; historialPorVendedor[v]=[];});
+  vendedores.forEach(v=>{historialPorVendedor[v]=[];});
   todosPagos.forEach(p=>{
     const v=(p.vendedor||'').toLowerCase();
-    if(pagado[v]!==undefined) {
-      pagado[v]+=parseFloat(p.monto)||0;
-      historialPorVendedor[v].push(p);
-    }
+    if(historialPorVendedor[v]!==undefined) historialPorVendedor[v].push(p);
   });
-  // Ordenar historial más reciente primero (por orden de aparición en la hoja, invertido)
   Object.keys(historialPorVendedor).forEach(v => historialPorVendedor[v].reverse());
 
   const total=todosClientes.reduce((s,c)=>s+(parseFloat(c.precio)||0),0);
 
-  // Pendiente total: suma de todos los vendedores visibles para este usuario.
-  // Para un vendedor individual, es solo lo suyo — eso es lo primero que quiere ver al entrar.
+  // Totales del hero, directos del libro.
   let pendienteTotal = 0, acumuladoTotal = 0, pagadoTotal = 0;
   vendedores.forEach(v => {
-    acumuladoTotal += resumen[v].total;
-    pagadoTotal += pagado[v];
+    acumuladoTotal += resumen[v].abonado;
+    pagadoTotal += resumen[v].pagado;
+    pendienteTotal += resumen[v].saldo;
   });
-  pendienteTotal = acumuladoTotal - pagadoTotal;
   const pctPagado = acumuladoTotal > 0.001 ? Math.max(0, Math.min(100, (pagadoTotal/acumuladoTotal)*100)) : 100;
   const ringR = 38, ringC = 2*Math.PI*ringR;
   const ringOffset = ringC - (pctPagado/100)*ringC;
@@ -2072,7 +2113,7 @@ function renderGanancias() {
       <div style="font-size:11.5px;color:var(--text2);">${misClientes} ventas propias activas</div>
     </div>` : ''}
     <div style="display:flex;flex-direction:column;gap:10px;">
-      ${vendedores.map(v => vendorCardHTML(v, resumen[v], pagado[v], historialPorVendedor[v])).join('')}
+      ${vendedores.map(v => vendorCardHTML(v, resumen[v], historialPorVendedor[v])).join('')}
     </div>
   </div>`;
 
@@ -2081,13 +2122,14 @@ function renderGanancias() {
 
 // Tarjeta individual de vendedor: mini-anillo de su propio avance + detalle colapsable.
 // Misma estructura para admin (ve botones de acción) y vendedor (solo lectura de lo suyo).
-function vendorCardHTML(v, r, pag, hist) {
-  const acum = r.total, pend = acum - pag;
+function vendorCardHTML(v, r, hist) {
+  const acum = r.abonado, pag = r.pagado, pend = r.saldo;
   const pct = COMISIONES[v] !== undefined ? COMISIONES[v] : 100;
   const pctPagadoV = acum > 0.001 ? Math.max(0, Math.min(100, (pag/acum)*100)) : 100;
   const ringR = 15, ringC = 2*Math.PI*ringR;
   const ringOffset = ringC - (pctPagadoV/100)*ringC;
   const alCorriente = pend <= 0.001;
+  const sobrepago = pend < -0.001; // le pagaste de más → saldo a favor
   const histId = 'hist-'+v, vuId = 'vu-hist-'+v;
   const vu = todasVentasUnicas.filter(x=>(x.vendedor||'').toLowerCase()===v);
   const nombreVisible = v==='ximenita' ? 'Xime' : v;
@@ -2127,11 +2169,11 @@ function vendorCardHTML(v, r, pag, hist) {
         <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:var(--green);">$${pag.toFixed(2)}</div>
       </div>
       <div class="cuenta-info-item">
-        <div class="cuenta-info-label">Pendiente</div>
-        <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:${pend>0.001?'var(--amber)':'var(--green)'};">$${pend.toFixed(2)}</div>
+        <div class="cuenta-info-label">${sobrepago?'A favor':'Pendiente'}</div>
+        <div style="font-family:'Space Grotesk';font-size:15px;font-weight:700;color:${pend>0.001?'var(--amber)':(sobrepago?'var(--violet)':'var(--green)')};">$${Math.abs(pend).toFixed(2)}</div>
       </div>
     </div>
-    ${r.caidos>0?`<div class="spark-line warn">⚠️ ${r.caidos} cliente${r.caidos!==1?'s':''} vencido${r.caidos!==1?'s':''} — no cuenta${r.caidos!==1?'n':''} hasta que renueve${r.caidos!==1?'n':''}</div>`:''}
+    ${sobrepago?`<div class="spark-line warn">⚠️ Le pagaste $${Math.abs(pend).toFixed(2)} de más — queda a su favor para el siguiente ciclo.</div>`:''}
     <div class="disclosure" onclick="this.classList.toggle('open');document.getElementById('${histId}').classList.toggle('open')" style="color:var(--violet);">
       <span class="chev">▾</span> 📜 Historial de pagos (${hist.length})
     </div>
@@ -2172,6 +2214,29 @@ function cargarVentasUnicas() {
     .catch(()=>{ todasVentasUnicas = []; });
 }
 
+// Lee el libro de comisiones (hoja 'comisiones'). El saldo de cada vendedor
+// sale de aquí — NO de re-sumar clientes activos.
+function cargarLedger() {
+  return fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'ledger',key:APP_KEY})})
+    .then(r=>r.json())
+    .then(res=>{ todasComisiones = res.rows||[]; })
+    .catch(()=>{ todasComisiones = []; });
+}
+
+// Suma todos los movimientos de un vendedor en el libro y devuelve
+// { abonado, pagado, saldo, nMov }. saldo = abonado - pagado.
+function saldoLedger_(vendedor) {
+  const v = (vendedor||'').toLowerCase();
+  let abonado = 0, pagado = 0, nMov = 0;
+  todasComisiones.forEach(m => {
+    if ((m.vendedor||'').toLowerCase() !== v) return;
+    const monto = parseFloat(m.monto) || 0;
+    nMov++;
+    if (monto >= 0) abonado += monto; else pagado += -monto;
+  });
+  return { abonado, pagado, saldo: abonado - pagado, nMov };
+}
+
 function previsualizarVentaUnica() {
   const monto = parseFloat(document.getElementById('vu-monto').value)||0;
   const preview = document.getElementById('vu-preview');
@@ -2207,7 +2272,7 @@ function guardarVentaUnica() {
     .then(res=>{
       if(res.status==='ok'){
         status.innerHTML = '<div class="success-box"><p>✅ Venta única registrada</p></div>';
-        cargarVentasUnicas().then(()=>{ renderGanancias(); });
+        Promise.all([cargarVentasUnicas(), cargarLedger()]).then(renderGanancias);
         setTimeout(()=>cerrarModal('modal-venta-unica'), 1000);
       } else throw new Error(res.message);
     })
@@ -2240,7 +2305,7 @@ function guardarPago() {
       if(res.status==='ok'){
         status.innerHTML = '<div class="success-box"><p>✅ Pago registrado</p></div>';
         toast('Pago registrado', 'success', '💰');
-        cargarPagos().then(()=>{ renderGanancias(); });
+        Promise.all([cargarPagos(), cargarLedger()]).then(renderGanancias);
         setTimeout(()=>cerrarModal('modal-pago'), 1000);
       } else throw new Error(res.message);
     })
@@ -2579,6 +2644,118 @@ function guardarNuevaCuenta() {
     })
     .catch(() => {
       status.innerHTML = '<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>';
+    });
+}
+
+// ===== Renovar cliente =====
+// Distinto de "Editar": renovar SUMA una nueva comisión a la ganancia ya
+// acumulada (porque es una venta nueva en el tiempo), actualiza la fecha
+// de inicio del nuevo ciclo (clave para que el corte mensual detecte la
+// renovación como "generado este mes"), y empuja la renovación +30 días.
+// No permite cambiar de paquete aquí a propósito — eso es trabajo de Editar.
+function abrirRenovar(id) {
+  const c = todosClientes.find(x => x.id === id);
+  if (!c) return;
+  cerrarModal('modal-detalle');
+  document.getElementById('renovar-id').value = c.id;
+  document.getElementById('renovar-nombre').textContent = c.cliente;
+  document.getElementById('renovar-paquete').textContent = (c.paquete||'Sin paquete') + (c.precio ? ' — $'+c.precio : '');
+  // Poblar el selector de combo (para upgrades). Por defecto: mantener el mismo.
+  const selPaq = document.getElementById('renovar-nuevo-paquete');
+  selPaq.innerHTML = '<option value="">Mantener el mismo combo</option>' +
+    Object.entries(PAQUETES_GANANCIA).map(([nombre,d])=>
+      `<option value="${nombre}|${d.precio}">${nombre} — $${d.precio}</option>`).join('');
+  selPaq.value = '';
+  document.getElementById('renovar-pago').value = 'PAGADO';
+  document.getElementById('renovar-status').innerHTML = '';
+  document.getElementById('btn-renovar').disabled = false;
+  document.getElementById('btn-renovar').textContent = 'Confirmar renovación';
+  const hoy = new Date().toISOString().split('T')[0];
+  document.getElementById('renovar-inicio').value = hoy;
+  document.getElementById('renovar-ganancia-previa').textContent = '$'+(parseFloat(c.ganancia)||0).toFixed(2);
+  calcularRenovacionRenovar();
+  document.getElementById('modal-renovar').classList.add('open');
+}
+
+function calcularRenovacionRenovar() {
+  const inicio = document.getElementById('renovar-inicio').value;
+  if (!inicio) return;
+  const d = new Date(inicio); d.setDate(d.getDate()+30);
+  document.getElementById('renovar-fecha-renovacion').value = String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+
+  const id = document.getElementById('renovar-id').value;
+  const c = todosClientes.find(x => x.id === id);
+  if (!c) return;
+  // Si eligió un combo nuevo (upgrade), la comisión se calcula con ese.
+  const selVal = document.getElementById('renovar-nuevo-paquete').value;
+  const paqueteParaGanancia = selVal ? selVal.split('|')[0] : c.paquete;
+  const gananciaNueva = calcularGananciaParaCliente_(paqueteParaGanancia, c.vendedor);
+  document.getElementById('renovar-ganancia-nueva').textContent = '$'+gananciaNueva.toFixed(2);
+}
+
+// Helper compartido: calcula cuánto generaría UNA venta/renovación de este
+// paquete para este vendedor, usando el % de comisión vigente.
+function calcularGananciaParaCliente_(nombrePaquete, vendedor) {
+  const datosCombo = PAQUETES_GANANCIA[nombrePaquete];
+  if (!datosCombo) return 0;
+  const gananciaAmigo = datosCombo.gananciaAmigo || 0;
+  const gananciaMia = datosCombo.gananciaNeta || 0;
+  const vendedorLower = (vendedor||'').toLowerCase();
+  if (vendedorLower === 'yo') return gananciaMia + gananciaAmigo;
+  const pct = COMISIONES[vendedorLower] !== undefined ? COMISIONES[vendedorLower] : 100;
+  const comision = gananciaAmigo * (pct/100);
+  return gananciaMia + (gananciaAmigo - comision);
+}
+
+function guardarRenovacion() {
+  const id = document.getElementById('renovar-id').value;
+  const c = todosClientes.find(x => x.id === id);
+  if (!c) return;
+  const inicio = document.getElementById('renovar-inicio').value;
+  if (!inicio) {
+    document.getElementById('renovar-status').innerHTML = '<div class="error-msg">⚠️ Elige la fecha de inicio del nuevo ciclo.</div>';
+    return;
+  }
+
+  // Upgrade opcional: si eligió un combo nuevo, se manda para cambiar el cliente.
+  const selVal = document.getElementById('renovar-nuevo-paquete').value;
+  const paqueteNuevo = selVal ? selVal.split('|')[0] : '';
+  const precioNuevo  = selVal ? selVal.split('|')[1] : '';
+  const paqueteCiclo = paqueteNuevo || c.paquete;
+
+  const gananciaPrevia = parseFloat(c.ganancia) || 0;
+  const gananciaNueva = calcularGananciaParaCliente_(paqueteCiclo, c.vendedor);
+  const gananciaTotal = gananciaPrevia + gananciaNueva;
+
+  // accion 'renovarCliente': el backend extiende fechas Y anota el abono de
+  // comisión en el libro. (Editar normal NO toca el libro, a propósito.)
+  const datos = {
+    accion: 'renovarCliente', key: APP_KEY,
+    id: c.id,
+    inicio: new Date(inicio).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}),
+    renovacion: document.getElementById('renovar-fecha-renovacion').value,
+    pago: document.getElementById('renovar-pago').value,
+    ganancia: gananciaTotal.toFixed(2),
+    paquete: paqueteNuevo,   // vacío = mantener el mismo
+    precio: precioNuevo,
+  };
+
+  const btn = document.getElementById('btn-renovar');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify(datos)})
+    .then(r => r.json())
+    .then(res => {
+      if (res.status === 'ok') {
+        document.getElementById('renovar-status').innerHTML = '<div class="success-box"><p>✅ Renovación registrada</p></div>';
+        toast('Cliente renovado, ¡a seguir!', 'success', '🔁');
+        cargarLedger();
+        setTimeout(() => { cerrarModal('modal-renovar'); cargarDatos(); }, 1000);
+      } else throw new Error(res.message);
+    })
+    .catch(() => {
+      document.getElementById('renovar-status').innerHTML = '<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>';
+      btn.disabled = false; btn.textContent = 'Confirmar renovación';
     });
 }
 
