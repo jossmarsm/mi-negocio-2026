@@ -946,29 +946,29 @@ const COMISIONES_DEFAULT = { ximenita:100, saito:100 };
 let COMISIONES = JSON.parse(JSON.stringify(COMISIONES_DEFAULT));
 
 const PAQUETES_GANANCIA_DEFAULT = {
-  'Netflix 4K':{precio:90,gananciaAmigo:20,gananciaNeta:10},
-  'Spotify Prem.':{precio:60,gananciaAmigo:25,gananciaNeta:17},
-  'YouTube Prem.':{precio:60,gananciaAmigo:25,gananciaNeta:11},
-  'Disney+ Prem.':{precio:70,gananciaAmigo:15,gananciaNeta:17.5},
-  'HBO Max':{precio:70,gananciaAmigo:20,gananciaNeta:15},
-  'Crunchyroll (1 disp)':{precio:55,gananciaAmigo:15,gananciaNeta:21.25},
-  'Combo anime (NF + Crunchy)':{precio:140,gananciaAmigo:30,gananciaNeta:31.3},
-  'paramount+':{precio:55,gananciaAmigo:15,gananciaNeta:10},
-  'Combo Estadio Paramount+ & Disney+':{precio:120,gananciaAmigo:30,gananciaNeta:23},
-  'Dúo Cine (DIS + HBO)':{precio:130,gananciaAmigo:30,gananciaNeta:27.5},
-  'Combo Melómano (SP + YT)':{precio:110,gananciaAmigo:38,gananciaNeta:30},
-  'Triple Play (NF + DIS + HBO)':{precio:210,gananciaAmigo:44,gananciaNeta:33.5},
-  'Combo Full Pro (NF+SP+YT)':{precio:180,gananciaAmigo:40,gananciaNeta:38},
-  'HOME TEATER NF+SP+YT+DIS+HBO':{precio:299,gananciaAmigo:70,gananciaNeta:54.5},
-  'disney + crunchy':{precio:115,gananciaAmigo:31,gananciaNeta:30},
-  'Crunchyroll (1 disp) + spotify':{precio:105,gananciaAmigo:35,gananciaNeta:33.25},
-  'Netflix 4K + HBO':{precio:145,gananciaAmigo:30,gananciaNeta:20},
-  'NETFLIX + YT PREMIUM':{precio:140,gananciaAmigo:30,gananciaNeta:26},
-  'NETFLIX + PARAMOUNT':{precio:135,gananciaAmigo:30,gananciaNeta:22.5},
-  'NETFLIX + SPOTIFY':{precio:140,gananciaAmigo:32,gananciaNeta:30},
-  'disney + spoti':{precio:120,gananciaAmigo:34.5,gananciaNeta:30},
-  'disney + netflix':{precio:160,gananciaAmigo:35,gananciaNeta:27.5},
-  '2 netfllix':{precio:180,gananciaAmigo:40,gananciaNeta:20},
+  'Netflix 4K':{precio:90,gananciaAmigo:20,gananciaNeta:10,plataformas:['NETFLIX']},
+  'Spotify Prem.':{precio:60,gananciaAmigo:25,gananciaNeta:17,plataformas:['SPOTIFY']},
+  'YouTube Prem.':{precio:60,gananciaAmigo:25,gananciaNeta:11,plataformas:['YOUTUBE PREM']},
+  'Disney+ Prem.':{precio:70,gananciaAmigo:15,gananciaNeta:17.5,plataformas:['DISNEY']},
+  'HBO Max':{precio:70,gananciaAmigo:20,gananciaNeta:15,plataformas:['HBO']},
+  'Crunchyroll (1 disp)':{precio:55,gananciaAmigo:15,gananciaNeta:21.25,plataformas:['CRUNCHYROLL']},
+  'Combo anime (NF + Crunchy)':{precio:140,gananciaAmigo:30,gananciaNeta:31.3,plataformas:['NETFLIX','CRUNCHYROLL']},
+  'paramount+':{precio:55,gananciaAmigo:15,gananciaNeta:10,plataformas:['PARAMOUNT']},
+  'Combo Estadio Paramount+ & Disney+':{precio:120,gananciaAmigo:30,gananciaNeta:23,plataformas:['PARAMOUNT','DISNEY']},
+  'Dúo Cine (DIS + HBO)':{precio:130,gananciaAmigo:30,gananciaNeta:27.5,plataformas:['DISNEY','HBO']},
+  'Combo Melómano (SP + YT)':{precio:110,gananciaAmigo:38,gananciaNeta:30,plataformas:['SPOTIFY','YOUTUBE PREM']},
+  'Triple Play (NF + DIS + HBO)':{precio:210,gananciaAmigo:44,gananciaNeta:33.5,plataformas:['NETFLIX','DISNEY','HBO']},
+  'Combo Full Pro (NF+SP+YT)':{precio:180,gananciaAmigo:40,gananciaNeta:38,plataformas:['NETFLIX','SPOTIFY','YOUTUBE PREM']},
+  'HOME TEATER NF+SP+YT+DIS+HBO':{precio:299,gananciaAmigo:70,gananciaNeta:54.5,plataformas:['NETFLIX','SPOTIFY','YOUTUBE PREM','DISNEY','HBO']},
+  'disney + crunchy':{precio:115,gananciaAmigo:31,gananciaNeta:30,plataformas:['DISNEY','CRUNCHYROLL']},
+  'Crunchyroll (1 disp) + spotify':{precio:105,gananciaAmigo:35,gananciaNeta:33.25,plataformas:['CRUNCHYROLL','SPOTIFY']},
+  'Netflix 4K + HBO':{precio:145,gananciaAmigo:30,gananciaNeta:20,plataformas:['NETFLIX','HBO']},
+  'NETFLIX + YT PREMIUM':{precio:140,gananciaAmigo:30,gananciaNeta:26,plataformas:['NETFLIX','YOUTUBE PREM']},
+  'NETFLIX + PARAMOUNT':{precio:135,gananciaAmigo:30,gananciaNeta:22.5,plataformas:['NETFLIX','PARAMOUNT']},
+  'NETFLIX + SPOTIFY':{precio:140,gananciaAmigo:32,gananciaNeta:30,plataformas:['NETFLIX','SPOTIFY']},
+  'disney + spoti':{precio:120,gananciaAmigo:34.5,gananciaNeta:30,plataformas:['DISNEY','SPOTIFY']},
+  'disney + netflix':{precio:160,gananciaAmigo:35,gananciaNeta:27.5,plataformas:['DISNEY','NETFLIX']},
+  '2 netfllix':{precio:180,gananciaAmigo:40,gananciaNeta:20,plataformas:['NETFLIX']},
 };
 let PAQUETES_GANANCIA = JSON.parse(JSON.stringify(PAQUETES_GANANCIA_DEFAULT));
 
@@ -1631,6 +1631,17 @@ function renderCatalogo() {
 }
 
 function detectarPlataformas(paquete) {
+  // Fuente de verdad: el campo 'plataformas' guardado explícitamente en el
+  // combo (elegido con checkboxes al crearlo). Esto evita adivinar mal
+  // cuando el nombre del combo no contiene palabras clave reconocibles
+  // (ej. "Home Theater 2" no dice "spotify" ni "vix" en ningún lado).
+  const datosCombo = PAQUETES_GANANCIA[paquete];
+  if (datosCombo && Array.isArray(datosCombo.plataformas) && datosCombo.plataformas.length) {
+    return [...new Set(datosCombo.plataformas)];
+  }
+
+  // Respaldo: combos antiguos creados antes de este fix, sin el campo
+  // explícito guardado. Se adivina por palabras clave en el nombre.
   const p = paquete.toLowerCase();
   const plats = [];
   if (p.includes('netflix') || p.includes('nf') || p.includes('home teater')) plats.push('NETFLIX');
@@ -2357,6 +2368,17 @@ function renderConfig() {
           <label class="form-label">Nombre del combo</label>
           <input class="form-input" id="ncb-nombre" placeholder="Ej. Netflix + Crunchyroll">
         </div>
+        <div class="form-group">
+          <label class="form-label">¿Qué plataformas incluye? *</label>
+          <div style="font-size:11.5px;color:var(--text3);margin-bottom:8px;">Esto controla qué cuenta se le asigna al cliente — elige todas las que apliquen.</div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;" id="ncb-plataformas">
+            ${Object.keys(PLAT_ICONS).filter(p=>p!=='YOUTUBE').map(plat => `
+              <label style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;">
+                <input type="checkbox" class="ncb-plat-check" value="${plat}" style="width:16px;height:16px;accent-color:var(--violet);">
+                ${PLAT_ICONS[plat]} ${plat}
+              </label>`).join('')}
+          </div>
+        </div>
         <div class="form-row">
           <div class="form-group">
             <label class="form-label">Precio público</label>
@@ -2464,8 +2486,11 @@ function sincronizarCombosServidor() {
         const precio = parseFloat(f['precio']);
         const amigo = parseFloat(f['ganancia_amigo']);
         const neta = parseFloat(f['ganancia_neta']);
+        const plataformasStr = (f['plataformas']||'').trim();
+        const plataformas = plataformasStr ? plataformasStr.split(',').map(p=>p.trim()).filter(Boolean) : undefined;
         if (nombre && !isNaN(precio)) {
           PAQUETES_GANANCIA[nombre] = { precio, gananciaAmigo: isNaN(amigo)?0:amigo, gananciaNeta: isNaN(neta)?0:neta };
+          if (plataformas && plataformas.length) PAQUETES_GANANCIA[nombre].plataformas = plataformas;
         }
       });
       guardarConfigLocal();
@@ -2483,10 +2508,15 @@ function guardarNuevoCombo() {
   const precio = parseFloat(document.getElementById('ncb-precio').value)||0;
   const amigo = parseFloat(document.getElementById('ncb-amigo').value)||0;
   const neta = parseFloat(document.getElementById('ncb-neta').value)||0;
+  const plataformasSeleccionadas = Array.from(document.querySelectorAll('.ncb-plat-check:checked')).map(c=>c.value);
   const status = document.getElementById('ncb-status');
 
   if (!nombre || precio<=0) {
     status.innerHTML = '<div class="error-msg">⚠️ Pon un nombre y un precio válido.</div>';
+    return;
+  }
+  if (!plataformasSeleccionadas.length) {
+    status.innerHTML = '<div class="error-msg">⚠️ Marca al menos una plataforma que incluya este combo.</div>';
     return;
   }
   if (PAQUETES_GANANCIA[nombre]) {
@@ -2494,10 +2524,10 @@ function guardarNuevoCombo() {
     return;
   }
 
-  PAQUETES_GANANCIA[nombre] = {precio, gananciaAmigo:amigo, gananciaNeta:neta};
+  PAQUETES_GANANCIA[nombre] = {precio, gananciaAmigo:amigo, gananciaNeta:neta, plataformas:plataformasSeleccionadas};
   guardarConfigLocal();
 
-  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify({accion:'agregarCombo', key:APP_KEY, nombre, precio, gananciaAmigo:amigo, gananciaNeta:neta})})
+  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify({accion:'agregarCombo', key:APP_KEY, nombre, precio, gananciaAmigo:amigo, gananciaNeta:neta, plataformas:plataformasSeleccionadas.join(',')})})
     .then(r=>r.json())
     .then(res=>{
       status.innerHTML = '<div class="success-box"><p>✅ Combo guardado y disponible para usar</p></div>';
@@ -2506,6 +2536,7 @@ function guardarNuevoCombo() {
       document.getElementById('ncb-precio').value='';
       document.getElementById('ncb-amigo').value='';
       document.getElementById('ncb-neta').value='';
+      document.querySelectorAll('.ncb-plat-check').forEach(c=>c.checked=false);
     })
     .catch(()=>{
       // Aunque falle el guardado remoto, ya quedó disponible localmente para esta sesión
