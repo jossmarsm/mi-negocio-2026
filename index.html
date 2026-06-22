@@ -879,6 +879,29 @@ body {
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-ajuste">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header">
+      <div class="modal-title">⚖️ Ajuste manual de saldo</div>
+      <button class="modal-close" onclick="cerrarModal('modal-ajuste')">✕</button>
+    </div>
+    <div id="aj-status"></div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;font-size:12.5px;color:var(--text2);">
+      Corrige el saldo de <strong id="aj-vendedor-nombre" style="color:var(--text);text-transform:capitalize;">—</strong> cuando algo se anotó mal (cliente vendido por error, renovación doble, etc.). Usa <strong style="color:var(--green);">positivo</strong> para sumarle, <strong style="color:var(--red);">negativo</strong> para restarle.
+    </div>
+    <div class="form-group">
+      <label class="form-label">Monto del ajuste (+ suma / − resta)</label>
+      <input class="form-input" type="number" id="aj-monto" placeholder="Ej. -31  ó  20">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Motivo (obligatorio)</label>
+      <input class="form-input" id="aj-nota" placeholder="Ej. Corrección: CL-1010 archivado por error">
+    </div>
+    <input type="hidden" id="aj-vendedor">
+    <button class="btn-primary" id="btn-ajuste" onclick="guardarAjuste()">Aplicar ajuste</button>
+  </div>
+</div>
+
 <!-- MODAL RENOVAR CLIENTE -->
 <div class="modal-overlay" id="modal-renovar">
   <div class="modal" style="max-width:420px;">
@@ -2053,10 +2076,23 @@ function renderGanancias() {
       if(activo){ resumen[v].clientes++; misGanancias+=g; misClientes++; }
     }
   });
-  // Conteo informativo de ventas únicas por vendedor (para la meta de la tarjeta).
+  // Ventas únicas: NO son recurrentes (pasan una sola vez), así que NO se mezclan
+  // con la ganancia recurrente "activa". Se cuentan aparte, solo las de ESTE mes en
+  // curso, y se resetean solas al cambiar de mes. (El Historial mensual las congela
+  // por mes para el registro permanente.)
+  const ahoraMes = new Date();
+  const mesActualYYYYMM = ahoraMes.getFullYear()+'-'+String(ahoraMes.getMonth()+1).padStart(2,'0');
+  let misVentasUnicasMes = 0;
   todasVentasUnicas.forEach(vu=>{
     const v=(vu.vendedor||'').toLowerCase();
-    if(resumen[v]!==undefined){ resumen[v].ventasUnicas++; }
+    if(resumen[v]!==undefined){
+      resumen[v].ventasUnicas++;
+      // ¿Esta venta única ocurrió en el mes en curso? (fecha en formato dd/mm/yyyy)
+      const f = parseFecha(vu.fecha);
+      if (f && (f.getFullYear()+'-'+String(f.getMonth()+1).padStart(2,'0')) === mesActualYYYYMM) {
+        misVentasUnicasMes += (parseFloat(vu.monto)||0)/2; // tu mitad
+      }
+    }
   });
   // Historial de pagos para mostrar (la hoja 'pagos' sigue siendo el registro visible).
   const historialPorVendedor={};
@@ -2116,7 +2152,11 @@ function renderGanancias() {
       </div>`}
     </div>
     ${MI_ROL==='admin' ? `<div class="mini-stat" style="flex-direction:row;align-items:center;justify-content:space-between;">
-      <div><div class="lbl">Tu ganancia total del negocio (clientes activos)</div><div class="val" style="margin-top:3px;">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div></div>
+      <div>
+        <div class="lbl">Tu ganancia total del negocio (clientes activos)</div>
+        <div class="val" style="margin-top:3px;">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
+        ${misVentasUnicasMes>0.001 ? `<div style="font-size:12px;color:var(--green);margin-top:4px;">+ ventas únicas este mes: $${misVentasUnicasMes.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>` : `<div style="font-size:12px;color:var(--text3);margin-top:4px;">+ ventas únicas este mes: $0.00</div>`}
+      </div>
       <div style="font-size:11.5px;color:var(--text2);text-align:right;">${misClientesDirectos} propias directas<br>${misClientes-misClientesDirectos} de tus vendedores</div>
     </div>` : ''}
     <div style="display:flex;flex-direction:column;gap:10px;">
@@ -2163,6 +2203,7 @@ function vendorCardHTML(v, r, hist) {
       ${MI_ROL==='admin' ? `
       <div style="display:flex;gap:6px;flex-shrink:0;">
         <button onclick="abrirModalVentaUnica('${v}')" class="btn-primary" style="width:auto;margin-top:0;padding:8px 10px;font-size:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:none;" title="Registrar venta única">🎟️</button>
+        <button onclick="abrirModalAjuste('${v}')" class="btn-primary" style="width:auto;margin-top:0;padding:8px 10px;font-size:12px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:none;" title="Ajuste manual del saldo">⚖️</button>
         <button onclick="abrirModalPago('${v}',${pend.toFixed(2)})" class="btn-primary" style="width:auto;margin-top:0;padding:8px 14px;font-size:12px;">Pagar</button>
       </div>` : ''}
     </div>
@@ -2204,6 +2245,23 @@ function vendorCardHTML(v, r, hist) {
           <div style="font-family:'Space Grotesk';font-weight:700;color:var(--amber);font-size:13px;">$${(t/2).toFixed(2)}</div>
         </div>`; }).join('')}
     </div>` : ''}
+    ${(()=>{ 
+      const ajId = 'aj-hist-'+v;
+      const ajustes = todasComisiones.filter(m => (m.vendedor||'').toLowerCase()===v && (m.tipo||'').toLowerCase()==='ajuste');
+      if (!ajustes.length) return '';
+      return `
+      <div class="disclosure" onclick="this.classList.toggle('open');document.getElementById('${ajId}').classList.toggle('open')" style="color:var(--violet2);">
+        <span class="chev">▾</span> ⚖️ Ajustes manuales (${ajustes.length})
+      </div>
+      <div class="cuenta-body" id="${ajId}" style="margin-top:2px;border-top:none;">
+        ${ajustes.map(a => { const m=parseFloat(a.monto||0); return `
+          <div class="slot-row">
+            <div class="slot-num" style="width:auto;color:var(--text2);">${a.fecha||'—'}</div>
+            <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${a.nota||'Ajuste'}</div>
+            <div style="font-family:'Space Grotesk';font-weight:700;color:${m>=0?'var(--green)':'var(--red)'};font-size:13px;">${m>=0?'+':'−'}$${Math.abs(m).toFixed(2)}</div>
+          </div>`; }).join('')}
+      </div>`;
+    })()}
   </div>`;
 }
 
@@ -2317,6 +2375,39 @@ function guardarPago() {
       } else throw new Error(res.message);
     })
     .catch(()=>{ status.innerHTML='<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>'; btn.disabled=false; btn.textContent='Registrar pago'; });
+}
+
+function abrirModalAjuste(vendedor) {
+  document.getElementById('aj-vendedor').value = vendedor;
+  document.getElementById('aj-vendedor-nombre').textContent = vendedor==='ximenita' ? 'Xime' : vendedor;
+  document.getElementById('aj-monto').value = '';
+  document.getElementById('aj-nota').value = '';
+  document.getElementById('aj-status').innerHTML = '';
+  document.getElementById('btn-ajuste').disabled = false;
+  document.getElementById('btn-ajuste').textContent = 'Aplicar ajuste';
+  document.getElementById('modal-ajuste').classList.add('open');
+}
+
+function guardarAjuste() {
+  const vendedor = document.getElementById('aj-vendedor').value;
+  const monto = parseFloat(document.getElementById('aj-monto').value)||0;
+  const nota = document.getElementById('aj-nota').value.trim();
+  const status = document.getElementById('aj-status');
+  if (monto === 0) { status.innerHTML = '<div class="error-msg">⚠️ El monto no puede ser 0 (usa + para sumar, − para restar).</div>'; return; }
+  if (!nota) { status.innerHTML = '<div class="error-msg">⚠️ Escribe el motivo del ajuste — queda en el registro.</div>'; return; }
+  const btn = document.getElementById('btn-ajuste');
+  btn.disabled = true; btn.textContent = 'Aplicando...';
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'ajusteComision',key:APP_KEY,vendedor:vendedor,monto:monto,nota:nota})})
+    .then(r=>r.json())
+    .then(res=>{
+      if(res.status==='ok'){
+        status.innerHTML = '<div class="success-box"><p>✅ Ajuste aplicado</p></div>';
+        toast('Saldo ajustado', 'success', '⚖️');
+        cargarLedger().then(renderGanancias);
+        setTimeout(()=>cerrarModal('modal-ajuste'), 1000);
+      } else throw new Error(res.message);
+    })
+    .catch(err=>{ status.innerHTML='<div class="error-msg">⚠️ '+(err.message||'Error al guardar. Intenta de nuevo.')+'</div>'; btn.disabled=false; btn.textContent='Aplicar ajuste'; });
 }
 
 function renderConfig() {
