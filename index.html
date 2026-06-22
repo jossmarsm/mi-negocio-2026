@@ -948,10 +948,6 @@ body {
     </div>
     <div class="ganancia-box">
       <div>
-        <div class="ganancia-label">Ganancia ya acumulada</div>
-        <div class="ganancia-value" style="font-size:16px;" id="renovar-ganancia-previa">$0</div>
-      </div>
-      <div style="text-align:right;">
         <div class="ganancia-label">+ Esta renovación</div>
         <div class="ganancia-value" id="renovar-ganancia-nueva">$0</div>
       </div>
@@ -3039,7 +3035,6 @@ function abrirRenovar(id) {
   renovarOpId = nuevoOpId();
   const hoy = hoyInputLocal();
   document.getElementById('renovar-inicio').value = hoy;
-  document.getElementById('renovar-ganancia-previa').textContent = '$'+(parseFloat(c.ganancia)||0).toFixed(2);
   calcularRenovacionRenovar();
   document.getElementById('modal-renovar').classList.add('open');
 }
@@ -3090,9 +3085,7 @@ function guardarRenovacion() {
   const precioNuevo  = selVal ? selVal.split('|')[1] : '';
   const paqueteCiclo = paqueteNuevo || c.paquete;
 
-  const gananciaPrevia = parseFloat(c.ganancia) || 0;
   const gananciaNueva = calcularGananciaParaCliente_(paqueteCiclo, c.vendedor);
-  const gananciaTotal = gananciaPrevia + gananciaNueva;
 
   // accion 'renovarCliente': el backend extiende fechas Y anota el abono de
   // comisión en el libro. (Editar normal NO toca el libro, a propósito.)
@@ -3102,7 +3095,7 @@ function guardarRenovacion() {
     inicio: formatoDDMMYYYY(fechaInputLocal(inicio)),
     renovacion: document.getElementById('renovar-fecha-renovacion').value,
     pago: document.getElementById('renovar-pago').value,
-    ganancia: gananciaTotal.toFixed(2),
+    ganancia: gananciaNueva.toFixed(2),
     paquete: paqueteNuevo,   // vacío = mantener el mismo
     precio: precioNuevo,
     opId: renovarOpId,
