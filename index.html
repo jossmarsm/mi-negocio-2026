@@ -1047,6 +1047,11 @@ let MI_ROL = '';
 let MI_NOMBRE = '';
 let usuarioSeleccionado = 'admin';
 
+// Idempotencia: un id único por operación (se genera al ABRIR cada modal y se
+// reutiliza en los reintentos del mismo envío). El backend lo usa para que un
+// doble clic o un timeout-que-sí-guardó nunca cree dos movimientos de dinero.
+let nuevoClienteOpId = '', renovarOpId = '', pagoOpId = '', ventaUnicaOpId = '', ajusteOpId = '';
+
 let todasCuentas = [];
 let filtroPlatActual = 'TODAS';
 
@@ -1126,6 +1131,28 @@ function parseFecha(s) {
   const p = s.split('/');
   if (p.length === 3) { const d = new Date(parseInt(p[2]),parseInt(p[1])-1,parseInt(p[0])); return isNaN(d.getTime())?null:d; }
   const d = new Date(s); return isNaN(d.getTime())?null:d;
+}
+// === Helpers de fecha SIN desfase de zona horaria ===
+// new Date("2026-07-01") se interpreta como medianoche UTC, que en México
+// (UTC-6) cae el 30/jun. Esto desplazaba la venta al mes anterior y descuadraba
+// el corte. fechaInputLocal parsea el "yyyy-mm-dd" del <input date> como fecha
+// LOCAL, y formatoDDMMYYYY/hoyInputLocal trabajan siempre en local.
+function fechaInputLocal(s) {
+  if (!s) return null;
+  const p = s.split('-');
+  if (p.length === 3) { const d = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2])); return isNaN(d.getTime())?null:d; }
+  const d = new Date(s); return isNaN(d.getTime())?null:d;
+}
+function formatoDDMMYYYY(d) {
+  if (!d) return '';
+  return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+}
+function hoyInputLocal() {
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function nuevoOpId() {
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,10);
 }
 function diasRestantes(f) {
   const fecha = parseFecha(f); if (!fecha) return null;
@@ -1381,7 +1408,10 @@ function cargarDatos() {
           paquete:f['paquete']||'', precio:f['precio']||'', cuenta:f['cuenta']||'',
           inicio:f['inicio']||'', renovacion, vendedor:f['vendedor']||'',
           pago:f['pago']||'', ganancia:f['ganancia']||'', dias, estado:estadoCliente(dias),
-          estado_raw: (getEstadoLocal(f['id']) || f['estado'] || 'ACTIVO').toUpperCase(),
+          // El servidor manda: es la única fuente de verdad del estado. Antes se
+          // priorizaba localStorage y eso dejaba "archivados fantasma" en un
+          // dispositivo que descuadraban el conteo y la vista de ganancias.
+          estado_raw: (f['estado'] || 'ACTIVO').toUpperCase(),
           notas:f['notas']||'',
         };
       });
@@ -1635,8 +1665,9 @@ function abrirModalNuevo() {
   document.getElementById('btn-guardar').disabled=false;
   document.getElementById('btn-guardar').textContent='Guardar cliente';
   document.getElementById('btn-guardar').style.display='';
-  const hoy=new Date().toISOString().split('T')[0];
+  const hoy=hoyInputLocal();
   document.getElementById('n-inicio').value=hoy;
+  nuevoClienteOpId = nuevoOpId();
   calcularRenovacion(); generarID();
 }
 function cerrarModal(id) { document.getElementById(id).classList.remove('open'); }
@@ -1648,8 +1679,8 @@ function generarID() {
 }
 function calcularRenovacion() {
   const inicio=document.getElementById('n-inicio').value; if(!inicio) return;
-  const d=new Date(inicio); d.setDate(d.getDate()+30);
-  document.getElementById('n-renovacion').value=String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+  const d=fechaInputLocal(inicio); if(!d) return; d.setDate(d.getDate()+30);
+  document.getElementById('n-renovacion').value=formatoDDMMYYYY(d);
 }
 function actualizarPrecio() {
   const sel=document.getElementById('n-paquete').value;
@@ -1854,11 +1885,12 @@ function guardarCliente() {
     paquete:partes[0],
     precio:partes[1],
     cuenta:Array.from(document.querySelectorAll('.n-cuenta-plat')).map(s=>s.value).filter(Boolean).join(', '),
-    inicio:new Date(inicio).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}),
+    inicio:formatoDDMMYYYY(fechaInputLocal(inicio)),
     renovacion:document.getElementById('n-renovacion').value,
     vendedor:document.getElementById('n-vendedor').value,
     pago:document.getElementById('n-pago').value,
     ganancia:miGanancia.toFixed(2),
+    opId:nuevoClienteOpId,
     key:APP_KEY
   };
 
@@ -2536,6 +2568,7 @@ function abrirModalVentaUnica(vendedorPreseleccionado) {
   document.getElementById('vu-status').innerHTML = '';
   document.getElementById('btn-venta-unica').disabled = false;
   document.getElementById('btn-venta-unica').textContent = 'Registrar venta única';
+  ventaUnicaOpId = nuevoOpId();
   document.getElementById('modal-venta-unica').classList.add('open');
 }
 
@@ -2548,7 +2581,7 @@ function guardarVentaUnica() {
   const btn = document.getElementById('btn-venta-unica');
   btn.disabled = true; btn.textContent = 'Guardando...';
   const hoy = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'registrarVentaUnica',key:APP_KEY,fecha:hoy,vendedor:vendedor,monto:monto,notas:notas})})
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'registrarVentaUnica',key:APP_KEY,fecha:hoy,vendedor:vendedor,monto:monto,notas:notas,opId:ventaUnicaOpId})})
     .then(r=>r.json())
     .then(res=>{
       if(res.status==='ok'){
@@ -2568,6 +2601,7 @@ function abrirModalPago(vendedor, pendiente) {
   document.getElementById('pago-status').innerHTML = '';
   document.getElementById('btn-pago').disabled = false;
   document.getElementById('btn-pago').textContent = 'Registrar pago';
+  pagoOpId = nuevoOpId();
   document.getElementById('modal-pago').classList.add('open');
 }
 
@@ -2580,7 +2614,7 @@ function guardarPago() {
   const btn = document.getElementById('btn-pago');
   btn.disabled = true; btn.textContent = 'Guardando...';
   const hoy = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'registrarPago',key:APP_KEY,fecha:hoy,vendedor:vendedor,concepto:'Pago de comisiones',monto:monto,tipo:'comision',notas:notas})})
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'registrarPago',key:APP_KEY,fecha:hoy,vendedor:vendedor,concepto:'Pago de comisiones',monto:monto,tipo:'comision',notas:notas,opId:pagoOpId})})
     .then(r=>r.json())
     .then(res=>{
       if(res.status==='ok'){
@@ -2601,6 +2635,7 @@ function abrirModalAjuste(vendedor) {
   document.getElementById('aj-status').innerHTML = '';
   document.getElementById('btn-ajuste').disabled = false;
   document.getElementById('btn-ajuste').textContent = 'Aplicar ajuste';
+  ajusteOpId = nuevoOpId();
   document.getElementById('modal-ajuste').classList.add('open');
 }
 
@@ -2613,7 +2648,7 @@ function guardarAjuste() {
   if (!nota) { status.innerHTML = '<div class="error-msg">⚠️ Escribe el motivo del ajuste — queda en el registro.</div>'; return; }
   const btn = document.getElementById('btn-ajuste');
   btn.disabled = true; btn.textContent = 'Aplicando...';
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'ajusteComision',key:APP_KEY,vendedor:vendedor,monto:monto,nota:nota})})
+  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'ajusteComision',key:APP_KEY,vendedor:vendedor,monto:monto,nota:nota,opId:ajusteOpId})})
     .then(r=>r.json())
     .then(res=>{
       if(res.status==='ok'){
@@ -2718,7 +2753,7 @@ function renderConfig() {
           </div>
           <div class="form-group">
             <label class="form-label">Slots totales</label>
-            <input class="form-input" type="number" id="nc-slots" value="4" min="1" max="6">
+            <input class="form-input" type="number" id="nc-slots" value="4" min="1" max="5">
           </div>
         </div>
         <div class="form-row">
@@ -2789,12 +2824,23 @@ function actualizarPaquete(idx, nombre) {
   const precio = parseFloat(document.getElementById('paq-precio-'+idx).value)||0;
   const amigo = parseFloat(document.getElementById('paq-amigo-'+idx).value)||0;
   const neta = parseFloat(document.getElementById('paq-neta-'+idx).value)||0;
+  if (precio < 0 || amigo < 0 || neta < 0) { toast('Los montos no pueden ser negativos', 'error'); return; }
   if (PAQUETES_GANANCIA[nombre]) {
     PAQUETES_GANANCIA[nombre].precio = precio;
     PAQUETES_GANANCIA[nombre].gananciaAmigo = amigo;
     PAQUETES_GANANCIA[nombre].gananciaNeta = neta;
     guardarConfigLocal();
-    toast('Combo actualizado');
+    // CLAVE (dinero): persistir en la hoja 'combos' del servidor. La comisión que
+    // se ABONA en el libro y el corte mensual leen ganancia_amigo de esa hoja
+    // (getGananciaAmigo_). Sin este envío, editar el combo solo cambiaba la vista
+    // local y lo abonado seguía con el valor viejo — el preview no cuadraba con
+    // lo realmente pagado. Mandamos plataformas solo si el combo ya las tiene
+    // (el backend no las borra si no se envían).
+    const plats = Array.isArray(PAQUETES_GANANCIA[nombre].plataformas) ? PAQUETES_GANANCIA[nombre].plataformas.join(',') : '';
+    fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'agregarCombo',key:APP_KEY,nombre,precio,gananciaAmigo:amigo,gananciaNeta:neta,plataformas:plats})})
+      .then(r=>r.json())
+      .then(()=>toast('Combo actualizado'))
+      .catch(()=>toast('Se guardó local, pero no se pudo sincronizar con Sheets', 'error'));
   }
 }
 
@@ -2894,6 +2940,10 @@ function guardarNuevoCombo() {
     status.innerHTML = '<div class="error-msg">⚠️ Pon un nombre y un precio válido.</div>';
     return;
   }
+  if (amigo < 0 || neta < 0) {
+    status.innerHTML = '<div class="error-msg">⚠️ Las ganancias no pueden ser negativas.</div>';
+    return;
+  }
   if (!plataformasSeleccionadas.length) {
     status.innerHTML = '<div class="error-msg">⚠️ Marca al menos una plataforma que incluya este combo.</div>';
     return;
@@ -2928,7 +2978,9 @@ function guardarNuevaCuenta() {
   const plataforma = document.getElementById('nc-plataforma').value;
   const correo = document.getElementById('nc-correo').value.trim();
   const pass = document.getElementById('nc-pass').value.trim();
-  const slots = document.getElementById('nc-slots').value;
+  // El sistema solo modela 5 slots (slot1..slot5). Acotamos aquí para no crear
+  // cuentas con un slot6 "fantasma" que nunca se ocuparía ni liberaría.
+  const slots = String(Math.max(1, Math.min(5, parseInt(document.getElementById('nc-slots').value)||4)));
   const pago = document.getElementById('nc-pago').value.trim();
   const status = document.getElementById('nc-status');
 
@@ -2984,7 +3036,8 @@ function abrirRenovar(id) {
   document.getElementById('renovar-status').innerHTML = '';
   document.getElementById('btn-renovar').disabled = false;
   document.getElementById('btn-renovar').textContent = 'Confirmar renovación';
-  const hoy = new Date().toISOString().split('T')[0];
+  renovarOpId = nuevoOpId();
+  const hoy = hoyInputLocal();
   document.getElementById('renovar-inicio').value = hoy;
   document.getElementById('renovar-ganancia-previa').textContent = '$'+(parseFloat(c.ganancia)||0).toFixed(2);
   calcularRenovacionRenovar();
@@ -2994,8 +3047,8 @@ function abrirRenovar(id) {
 function calcularRenovacionRenovar() {
   const inicio = document.getElementById('renovar-inicio').value;
   if (!inicio) return;
-  const d = new Date(inicio); d.setDate(d.getDate()+30);
-  document.getElementById('renovar-fecha-renovacion').value = String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+  const d = fechaInputLocal(inicio); if(!d) return; d.setDate(d.getDate()+30);
+  document.getElementById('renovar-fecha-renovacion').value = formatoDDMMYYYY(d);
 
   const id = document.getElementById('renovar-id').value;
   const c = todosClientes.find(x => x.id === id);
@@ -3046,12 +3099,13 @@ function guardarRenovacion() {
   const datos = {
     accion: 'renovarCliente', key: APP_KEY,
     id: c.id,
-    inicio: new Date(inicio).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}),
+    inicio: formatoDDMMYYYY(fechaInputLocal(inicio)),
     renovacion: document.getElementById('renovar-fecha-renovacion').value,
     pago: document.getElementById('renovar-pago').value,
     ganancia: gananciaTotal.toFixed(2),
     paquete: paqueteNuevo,   // vacío = mantener el mismo
     precio: precioNuevo,
+    opId: renovarOpId,
   };
 
   const btn = document.getElementById('btn-renovar');
@@ -3127,14 +3181,23 @@ function actualizarPrecioEditar() {
 function calcularRenovacionEditar() {
   const inicio = document.getElementById('e-inicio').value;
   if (!inicio) return;
-  const d = new Date(inicio); d.setDate(d.getDate() + 30);
-  document.getElementById('e-renovacion').value = String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear();
+  const d = fechaInputLocal(inicio); if(!d) return; d.setDate(d.getDate() + 30);
+  document.getElementById('e-renovacion').value = formatoDDMMYYYY(d);
 }
 
 function guardarEdicion() {
   const id = document.getElementById('e-id').value;
   const sel = document.getElementById('e-paquete').value;
   const vendedorSel = document.getElementById('e-vendedor').value;
+
+  // Aviso: cambiar de vendedor NO mueve solo la comisión ya abonada en el libro.
+  // Editar es corrección de datos, no toca dinero. Si de verdad cambió el dueño
+  // de la venta, hay que corregir saldos con un Ajuste manual a cada uno.
+  const cOrig = todosClientes.find(x => x.id === id);
+  if (cOrig && (cOrig.vendedor||'').toLowerCase() !== (vendedorSel||'').toLowerCase()) {
+    const ok = confirm('Vas a cambiar el vendedor de "'+(cOrig.vendedor||'—')+'" a "'+vendedorSel+'".\n\nOjo: la comisión que ya se le abonó al vendedor anterior NO se transfiere sola. Si hace falta, corrígelo después con un Ajuste manual (⚖️) en Ganancias.\n\n¿Continuar?');
+    if (!ok) return;
+  }
 
   // Recalculamos la ganancia con el paquete y vendedor actuales del
   // formulario — igual que al crear un cliente nuevo. Si no hay un
@@ -3165,7 +3228,7 @@ function guardarEdicion() {
     paquete: sel ? sel.split('|')[0] : '',
     precio: sel ? sel.split('|')[1] : document.getElementById('e-precio').value.replace('$',''),
     cuenta: Array.from(document.querySelectorAll('.e-cuenta-plat')).map(s=>s.value).filter(Boolean).join(', '),
-    inicio: document.getElementById('e-inicio').value ? new Date(document.getElementById('e-inicio').value).toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}) : '',
+    inicio: document.getElementById('e-inicio').value ? formatoDDMMYYYY(fechaInputLocal(document.getElementById('e-inicio').value)) : '',
     renovacion: document.getElementById('e-renovacion').value,
     vendedor: vendedorSel,
     pago: document.getElementById('e-pago').value,
