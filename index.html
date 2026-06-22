@@ -394,6 +394,14 @@ body {
 }
 .delete-acc-btn:hover { background: rgba(251,113,133,0.22); }
 
+.acc-btn {
+  flex: 1; min-width: 130px; font-size: 12px; padding: 9px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+  font-weight: 600; cursor: pointer; transition: all 0.2s var(--ease); text-align: center;
+}
+.acc-btn:hover { background: var(--surface-hover); transform: translateY(-1px); }
+.acc-btn:active { transform: scale(0.97); }
+
 /* ===== Earnings hero ===== */
 .earn-hero {
   background: linear-gradient(135deg, rgba(139,92,246,0.16), rgba(99,102,241,0.06));
@@ -953,6 +961,46 @@ body {
   </div>
 </div>
 
+<!-- MODAL EDITAR DATOS DE CUENTA -->
+<div class="modal-overlay" id="modal-editar-cuenta">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <div class="modal-title">Editar datos de la cuenta</div>
+      <button class="modal-close" onclick="cerrarModal('modal-editar-cuenta')">✕</button>
+    </div>
+    <div id="ec-nombre" style="font-size:13px;color:var(--text2);margin-bottom:16px;"></div>
+    <div class="form-group">
+      <label class="form-label">Correo</label>
+      <input class="form-input" id="ec-correo" placeholder="correo@cuenta.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Contraseña</label>
+      <input class="form-input" id="ec-pass" placeholder="contraseña">
+    </div>
+    <div style="font-size:11.5px;color:var(--text3);line-height:1.5;margin-bottom:6px;">
+      💡 Si cambias la contraseña en Netflix, Disney, Max, Paramount o Crunchyroll,
+      al guardar te ofreceremos avisar a los clientes de esa cuenta con sus datos nuevos.
+    </div>
+    <div id="ec-status"></div>
+    <button class="btn-primary" id="btn-editar-cuenta" onclick="guardarEditarCuenta()">Guardar cambios</button>
+  </div>
+</div>
+
+<!-- MODAL AVISAR NUEVA CONTRASEÑA A CLIENTES -->
+<div class="modal-overlay" id="modal-avisar-cuenta">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header">
+      <div class="modal-title">Avisar nueva clave</div>
+      <button class="modal-close" onclick="cerrarModal('modal-avisar-cuenta')">✕</button>
+    </div>
+    <div id="av-nombre" style="font-size:13px;color:var(--text2);margin-bottom:8px;"></div>
+    <div id="av-datos" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;margin-bottom:14px;"></div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:6px;">Clientes en esta cuenta:</div>
+    <div id="av-lista"></div>
+    <button class="btn-primary" style="background:var(--surface);color:var(--text2);box-shadow:none;margin-top:14px;" onclick="cerrarModal('modal-avisar-cuenta')">Listo</button>
+  </div>
+</div>
+
 <!-- MODAL CONFIRMAR ELIMINAR CUENTA -->
 <div class="modal-overlay" id="modal-confirmar">
   <div class="modal" style="max-width:380px;">
@@ -1005,6 +1053,23 @@ let filtroPlatActual = 'TODAS';
 const PLAT_ICONS = {
   'NETFLIX':'🎬','SPOTIFY':'🎵','YOUTUBE PREM':'▶️','YOUTUBE':'▶️',
   'HBO':'📺','DISNEY':'🏰','PARAMOUNT':'⭐','CRUNCHYROLL':'⚡','VIX':'🎞️'
+};
+
+// Gestión rápida por plataforma:
+//  - tipo 'password': se saca a la gente cambiando la contraseña → al cambiarla
+//    hay que avisar a los clientes con sus datos nuevos.
+//  - tipo 'familiar': se saca a la gente quitándola del plan familiar → NO afecta
+//    a los demás, así que no hace falta avisar contraseñas.
+const GESTION_PLATAFORMA = {
+  'NETFLIX':     { url:'https://www.netflix.com/password',          tipo:'password', label:'Cambiar contraseña en Netflix' },
+  'DISNEY':      { url:'https://www.disneyplus.com/account/security', tipo:'password', label:'Cambiar contraseña en Disney+' },
+  'HBO':         { url:'https://www.max.com/account',                tipo:'password', label:'Gestionar cuenta en Max' },
+  'PARAMOUNT':   { url:'https://www.paramountplus.com/account/',     tipo:'password', label:'Gestionar cuenta en Paramount+' },
+  'CRUNCHYROLL': { url:'https://www.crunchyroll.com/account',        tipo:'password', label:'Gestionar cuenta en Crunchyroll' },
+  'VIX':         { url:'https://vix.com/account',                    tipo:'password', label:'Gestionar cuenta en ViX' },
+  'SPOTIFY':     { url:'https://www.spotify.com/account/',           tipo:'familiar', label:'Administrar miembros del plan' },
+  'YOUTUBE PREM':{ url:'https://families.google.com/families',       tipo:'familiar', label:'Administrar grupo familiar' },
+  'YOUTUBE':     { url:'https://families.google.com/families',       tipo:'familiar', label:'Administrar grupo familiar' },
 };
 
 let todosClientes = [];
@@ -1522,8 +1587,11 @@ function verDetalle(id) {
       <div><div class="detalle-label">Inicio</div><div class="detalle-value">${c.inicio||'—'}</div></div>
       <div><div class="detalle-label">Renovación</div><div class="detalle-value">${c.renovacion||'—'}</div></div>
       <div><div class="detalle-label">Pago</div><div class="detalle-value">${c.pago||'—'}</div></div>
-      <div><div class="detalle-label">Tu ganancia</div><div class="detalle-value" style="color:var(--green);font-weight:700;">${ganancia>0?'$'+ganancia.toFixed(2):'—'}</div></div>
-      ${esVendedor ? `<div><div class="detalle-label">Comisión ${c.vendedor} (${pctVendedor}%)</div><div class="detalle-value" style="color:var(--amber);font-weight:700;">${comisionVend>0?'$'+comisionVend.toFixed(2):'—'}</div></div><div></div>` : ''}
+      ${MI_ROL==='admin'
+        ? `<div><div class="detalle-label">Tu ganancia</div><div class="detalle-value" style="color:var(--green);font-weight:700;">${ganancia>0?'$'+ganancia.toFixed(2):'—'}</div></div>
+           ${esVendedor ? `<div><div class="detalle-label">Comisión ${c.vendedor} (${pctVendedor}%)</div><div class="detalle-value" style="color:var(--amber);font-weight:700;">${comisionVend>0?'$'+comisionVend.toFixed(2):'—'}</div></div><div></div>` : ''}`
+        : `<div><div class="detalle-label">Tu comisión</div><div class="detalle-value" style="color:var(--green);font-weight:700;">${comisionVend>0?'$'+comisionVend.toFixed(2):'—'}</div></div>`
+      }
     </div>
     ${c.notas ? `<div style="background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📝 <strong>Nota:</strong> ${c.notas}</div>` : ''}`;
   const esArchivado = c.estado_raw==='ARCHIVADO';
@@ -1958,7 +2026,7 @@ function renderCuentas() {
               ${MI_ROL==='admin' ? `<button class="slot-action" onclick="liberarSlot('${c.nombre}','${i}')">Liberar</button>` : ''}
             </div>`;
           }).join('')}
-          ${MI_ROL==='admin' ? `<button class="delete-acc-btn" style="width:100%;margin-top:14px;padding:9px;" onclick="confirmarEliminarCuenta('${c.nombre.replace(/'/g,"")}')">🗑 Eliminar esta cuenta</button>` : ''}
+          ${MI_ROL==='admin' ? renderAccionesCuenta(c) : ''}
         </div>
       </div>`;
     });
@@ -2021,6 +2089,154 @@ function confirmarEliminarCuenta(nombreCuenta) {
         });
     }
   );
+}
+
+// ===== MEJORA 2: acciones rápidas por cuenta (solo admin) =====
+function renderAccionesCuenta(c) {
+  const nombreSeguro = c.nombre.replace(/'/g,"\\'");
+  const gestion = GESTION_PLATAFORMA[c.plataforma];
+  const esPassword = gestion && gestion.tipo === 'password';
+  let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">';
+  // Botón "Gestionar" → abre la página de la plataforma (cambiar contraseña o
+  // administrar plan familiar, según el tipo).
+  if (gestion) {
+    html += `<button class="acc-btn" onclick="abrirGestionarPlataforma('${nombreSeguro}')">🔧 ${gestion.tipo==='familiar'?'Administrar plan':'Cambiar contraseña'}</button>`;
+  }
+  // Botón "Editar datos" → correo y/o contraseña.
+  html += `<button class="acc-btn" onclick="abrirEditarCuenta('${nombreSeguro}')">✏️ Editar datos</button>`;
+  // Botón "Avisar clientes" → solo para plataformas de contraseña (en familiar
+  // no afecta a los demás, no hace falta avisar nada).
+  if (esPassword) {
+    html += `<button class="acc-btn" onclick="abrirAvisarCuenta('${nombreSeguro}')">📲 Avisar nueva clave</button>`;
+  }
+  html += '</div>';
+  // Eliminar va abajo, separado, en rojo (acción destructiva).
+  html += `<button class="delete-acc-btn" style="width:100%;margin-top:10px;padding:9px;" onclick="confirmarEliminarCuenta('${nombreSeguro}')">🗑 Eliminar esta cuenta</button>`;
+  return html;
+}
+
+function abrirGestionarPlataforma(nombreCuenta) {
+  const c = todasCuentas.find(x => x.nombre === nombreCuenta);
+  if (!c) return;
+  const gestion = GESTION_PLATAFORMA[c.plataforma];
+  if (!gestion) { toast('No hay enlace de gestión para esta plataforma', 'error'); return; }
+  window.open(gestion.url, '_blank');
+  // Si es de contraseña, le recordamos que después conviene avisar a sus clientes.
+  if (gestion.tipo === 'password') {
+    setTimeout(()=>toast('Cuando cambies la clave, usa "Avisar nueva clave"', 'success', '💡'), 400);
+  }
+}
+
+// ===== MEJORA 2: editar correo / contraseña de una cuenta =====
+let cuentaEnEdicion = null;
+let cuentaEnAviso = null;
+function abrirEditarCuenta(nombreCuenta) {
+  const c = todasCuentas.find(x => x.nombre === nombreCuenta);
+  if (!c) return;
+  cuentaEnEdicion = c;
+  document.getElementById('ec-nombre').textContent = c.nombre + ' · ' + c.plataforma;
+  document.getElementById('ec-correo').value = c.correo || '';
+  document.getElementById('ec-pass').value = c.contrasena || '';
+  document.getElementById('ec-status').innerHTML = '';
+  const btn = document.getElementById('btn-editar-cuenta');
+  btn.disabled = false; btn.textContent = 'Guardar cambios';
+  document.getElementById('modal-editar-cuenta').classList.add('open');
+}
+
+function guardarEditarCuenta() {
+  if (!cuentaEnEdicion) return;
+  const correo = document.getElementById('ec-correo').value.trim();
+  const pass = document.getElementById('ec-pass').value.trim();
+  const status = document.getElementById('ec-status');
+  if (!correo) { status.innerHTML = '<div class="error-msg">⚠️ El correo no puede quedar vacío.</div>'; return; }
+
+  const passAnterior = cuentaEnEdicion.contrasena || '';
+  const cambioPass = pass !== passAnterior;
+  const gestion = GESTION_PLATAFORMA[cuentaEnEdicion.plataforma];
+  const esPassword = gestion && gestion.tipo === 'password';
+
+  const btn = document.getElementById('btn-editar-cuenta');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify({
+    accion:'editarCuenta', nombreCuenta: cuentaEnEdicion.nombre, correo, contrasena: pass, key: APP_KEY
+  })})
+    .then(r=>r.json())
+    .then(res=>{
+      if (res.status==='ok') {
+        // Actualizamos la copia local para que el aviso use ya los datos nuevos
+        cuentaEnEdicion.correo = correo;
+        cuentaEnEdicion.contrasena = pass;
+        status.innerHTML = '<div class="success-box"><p>✅ Datos actualizados</p></div>';
+        cargarCuentasBackground();
+        // Si cambió la contraseña en una plataforma tipo password, ofrecemos
+        // avisar a los clientes con sus datos nuevos (MEJORA 3).
+        if (cambioPass && esPassword) {
+          const nombreRef = cuentaEnEdicion.nombre;
+          setTimeout(()=>{ cerrarModal('modal-editar-cuenta'); abrirAvisarCuenta(nombreRef); }, 900);
+        } else {
+          setTimeout(()=>{ cerrarModal('modal-editar-cuenta'); cargarCuentas(); }, 1000);
+        }
+      } else throw new Error(res.message);
+    })
+    .catch(()=>{
+      status.innerHTML = '<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>';
+      btn.disabled = false; btn.textContent = 'Guardar cambios';
+    });
+}
+
+// ===== MEJORA 3: avisar a los clientes de una cuenta su nueva clave =====
+function mensajeNuevaContrasena(cliente, cuenta) {
+  const primerNombre = (cliente.cliente||'').trim().split(' ')[0] || 'amig@';
+  const plat = cuenta.plataforma ? cuenta.plataforma.charAt(0) + cuenta.plataforma.slice(1).toLowerCase() : 'tu servicio';
+  return `Hola ${primerNombre} 👋 Te avisamos que por seguridad actualizamos los datos de acceso de tu cuenta de *${plat}*.\n\nEstos son tus datos nuevos:\n📧 Correo: ${cuenta.correo||'(el mismo de siempre)'}\n🔑 Contraseña: ${cuenta.contrasena||''}\n\nCon eso ya puedes volver a entrar sin problema. Cualquier duda, aquí estamos 😊`;
+}
+
+function abrirAvisarCuenta(nombreCuenta) {
+  const c = todasCuentas.find(x => x.nombre === nombreCuenta);
+  if (!c) return;
+  cuentaEnAviso = c;
+  // Buscamos los clientes que están en los slots de esta cuenta.
+  const idsEnCuenta = c.slots.slice(0, c.slotsTotal).filter(s => s && s.toLowerCase() !== 'x');
+  const clientesEnCuenta = idsEnCuenta
+    .map(id => todosClientes.find(cl => cl.id === id))
+    .filter(Boolean);
+
+  document.getElementById('av-nombre').textContent = c.nombre + ' · ' + c.plataforma;
+  document.getElementById('av-datos').innerHTML =
+    `<div style="font-size:12px;color:var(--text2);">Datos que se enviarán:</div>
+     <div style="font-size:13px;margin-top:4px;">📧 ${c.correo||'—'} &nbsp;·&nbsp; 🔑 ${c.contrasena||'—'}</div>`;
+
+  const cont = document.getElementById('av-lista');
+  if (!clientesEnCuenta.length) {
+    cont.innerHTML = '<div class="empty" style="padding:2rem 1rem;"><div class="empty-title">No hay clientes en esta cuenta</div></div>';
+  } else {
+    cont.innerHTML = clientesEnCuenta.map(cl => {
+      const tieneTel = !!(cl.contacto && cl.contacto.replace(/\D/g,'').length >= 10);
+      const col = colorAvatar(cl.cliente);
+      return `<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:0.5px solid var(--border);">
+        <div class="avatar" style="width:36px;height:36px;font-size:12px;background:${col.bg};color:${col.color};">${iniciales(cl.cliente)}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:600;">${cl.cliente}</div>
+          <div style="font-size:11px;color:var(--text3);">${tieneTel ? cl.contacto : 'Sin teléfono guardado'}</div>
+        </div>
+        ${tieneTel
+          ? `<button class="acc-btn" style="background:var(--green-bg);border-color:rgba(52,211,153,0.35);color:var(--green);" onclick="enviarAvisoContrasena('${cl.id}')">💬 Avisar</button>`
+          : `<span style="font-size:11px;color:var(--text3);">—</span>`}
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('modal-avisar-cuenta').classList.add('open');
+}
+
+function enviarAvisoContrasena(clienteId) {
+  if (!cuentaEnAviso) return;
+  const cl = todosClientes.find(x => x.id === clienteId);
+  if (!cl) return;
+  const limpio = (cl.contacto||'').replace(/\D/g,'');
+  const numero = limpio.length === 10 ? '52'+limpio : limpio;
+  const msg = encodeURIComponent(mensajeNuevaContrasena(cl, cuentaEnAviso));
+  window.open(`https://wa.me/${numero}?text=${msg}`, '_blank');
 }
 
 // Modal de confirmación genérico
