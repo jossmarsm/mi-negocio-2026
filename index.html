@@ -3185,7 +3185,7 @@ function calcularRenovacionEditar() {
   document.getElementById('e-renovacion').value = formatoDDMMYYYY(d);
 }
 
-function guardarEdicion() {
+async function guardarEdicion() {
   const id = document.getElementById('e-id').value;
   const sel = document.getElementById('e-paquete').value;
   const vendedorSel = document.getElementById('e-vendedor').value;
@@ -3195,7 +3195,7 @@ function guardarEdicion() {
   // de la venta, hay que corregir saldos con un Ajuste manual a cada uno.
   const cOrig = todosClientes.find(x => x.id === id);
   if (cOrig && (cOrig.vendedor||'').toLowerCase() !== (vendedorSel||'').toLowerCase()) {
-    const ok = confirm('Vas a cambiar el vendedor de "'+(cOrig.vendedor||'—')+'" a "'+vendedorSel+'".\n\nOjo: la comisión que ya se le abonó al vendedor anterior NO se transfiere sola. Si hace falta, corrígelo después con un Ajuste manual (⚖️) en Ganancias.\n\n¿Continuar?');
+    const ok = await confirmar('Vas a cambiar el vendedor de "'+(cOrig.vendedor||'—')+'" a "'+vendedorSel+'".\n\nOjo: la comisión que ya se le abonó al vendedor anterior NO se transfiere sola. Si hace falta, corrígelo después con un Ajuste manual (⚖️) en Ganancias.\n\n¿Continuar?');
     if (!ok) return;
   }
 
@@ -3371,8 +3371,28 @@ function hacerLogin() {
     });
 }
 
-function cerrarSesion() {
-  if (!confirm('¿Cerrar sesión?')) return;
+function confirmar(msg) {
+  return new Promise(resolve => {
+    const overlay = document.getElementById('confirm-overlay');
+    document.getElementById('confirm-msg').textContent = msg;
+    overlay.style.display = 'flex';
+    const ok = document.getElementById('confirm-ok');
+    const cancel = document.getElementById('confirm-cancel');
+    function cleanup(val) {
+      overlay.style.display = 'none';
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      resolve(val);
+    }
+    function onOk() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+  });
+}
+
+async function cerrarSesion() {
+  if (!await confirmar('¿Cerrar sesión?')) return;
   try { localStorage.removeItem('app_key'); } catch(e){}
   location.reload();
 }
@@ -3483,5 +3503,16 @@ window.addEventListener('resize', () => {
 })();
 
 </script>
+
+<!-- Modal de confirmación custom (reemplaza el confirm() nativo) -->
+<div id="confirm-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#1e1e2e;border:1px solid #444;border-radius:14px;padding:28px 28px 22px;max-width:360px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.6);">
+    <p id="confirm-msg" style="color:#e2e2e2;margin:0 0 22px;font-size:15px;line-height:1.5;white-space:pre-line;"></p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button id="confirm-cancel" style="padding:9px 20px;border-radius:8px;border:1px solid #555;background:transparent;color:#aaa;cursor:pointer;font-size:14px;">Cancelar</button>
+      <button id="confirm-ok" style="padding:9px 20px;border-radius:8px;border:none;background:#7c5cfc;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Aceptar</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
