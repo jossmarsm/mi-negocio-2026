@@ -112,6 +112,30 @@ body {
 .refresh-btn:active { transform: scale(0.96); }
 .refresh-btn.spinning svg { animation: spin 0.6s linear; }
 
+/* ===== Notificaciones ===== */
+.notif-badge {
+  position: absolute; top: -5px; right: -5px; min-width: 17px; height: 17px; padding: 0 4px;
+  background: var(--red); color: #fff; border-radius: 99px; font-size: 10px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; line-height: 1; border: 1.5px solid var(--bg);
+}
+#btn-notif.tiene-alertas { animation: notifPulse 2.4s ease-in-out infinite; }
+@keyframes notifPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(251,113,133,0); } 50% { box-shadow: 0 0 0 4px rgba(251,113,133,0.12); } }
+.notif-item {
+  display: flex; align-items: center; gap: 12px; padding: 13px 14px; margin-bottom: 8px; cursor: pointer;
+  background: var(--surface-solid); border: 1px solid var(--border); border-left-width: 3px; border-radius: 12px;
+  transition: background 0.15s var(--ease), transform 0.1s var(--ease);
+}
+.notif-item:hover { background: var(--surface-hover); }
+.notif-item:active { transform: scale(0.99); }
+.notif-item.notif-rojo { border-left-color: var(--red); }
+.notif-item.notif-ambar { border-left-color: var(--amber); }
+.notif-item.notif-azul { border-left-color: var(--violet2); }
+.notif-item.notif-verde { border-left-color: var(--green); }
+.notif-icon { font-size: 22px; flex-shrink: 0; }
+.notif-titulo { font-size: 14px; font-weight: 700; color: var(--text); }
+.notif-detalle { font-size: 12px; color: var(--text3); margin-top: 2px; line-height: 1.35; }
+.notif-chevron { font-size: 22px; color: var(--text3); flex-shrink: 0; }
+
 /* ===== Nav tabs ===== */
 .nav-tabs {
   display: flex; gap: 4px; background: rgba(20,20,31,0.5); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
@@ -627,6 +651,7 @@ body {
       <div class="av" id="user-av">?</div>
       <span id="user-nombre">—</span>
     </div>
+    <button class="refresh-btn" id="btn-notif" onclick="abrirNotificaciones()" title="Notificaciones" style="position:relative;">🔔<span class="notif-badge" id="notif-badge" style="display:none;">0</span></button>
     <button class="refresh-btn" id="btn-ayuda" onclick="iniciarTour(true)" title="Cómo funciona la app">❓</button>
     <button class="refresh-btn" id="refresh-btn" onclick="recargarVista()">↻</button>
   </div>
@@ -1133,7 +1158,8 @@ let filtroPlatActual = 'TODAS';
 // servidor. Apps Script tarda 1-3s por llamada, así que evitar re-descargar en
 // cada cambio de pestaña es lo que más acelera la app.
 let seccionActual = 'clientes';
-let cuentasCargadas = false, gananciasCargadas = false;
+let cuentasCargadas = false, gananciasCargadas = false, ledgerCargado = false;
+let _notifsActuales = [];
 
 const PLAT_ICONS = {
   'NETFLIX':'🎬','SPOTIFY':'🎵','YOUTUBE PREM':'▶️','YOUTUBE':'▶️',
@@ -1414,7 +1440,9 @@ function cargarGanancias() {
       todasVentasUnicas = d['ventas_unicas']||[];
       todasComisiones = d['ledger']||[];
       gananciasCargadas = true;
+      ledgerCargado = true;
       renderGanancias();
+      actualizarNotificaciones();
     })
     .catch(()=>{
       document.getElementById('ganancias-content').innerHTML = '<div class="error-msg">⚠️ No se pudieron cargar las ganancias.</div>';
@@ -1608,6 +1636,117 @@ function actualizarMetricas() {
   document.title = numVencidos > 0 ? '(' + numVencidos + ') Cuentas Streaming' : 'Cuentas Streaming';
 
   renderRacha(activos, numVencidos);
+  actualizarNotificaciones();
+}
+
+// ===== Centro de notificaciones =====
+// Todo se calcula al vuelo desde los datos ya cargados (clientes, cuentas,
+// libro). No se "marcan como leídas": una alerta desaparece sola cuando
+// resuelves lo que la causaba (renovar un vencido, cobrar, comprar otra cuenta…).
+function calcularNotificaciones() {
+  const out = [];
+  const activos = todosClientes.filter(c => c.estado_raw !== 'ARCHIVADO');
+  const vencidos = activos.filter(c => c.estado === 'vencido');
+  const proximos = activos.filter(c => c.estado === 'proximo');
+  const deben = activos.filter(c => (c.pago||'').toUpperCase() === 'PENDIENTE');
+
+  if (vencidos.length) out.push({ sev:'rojo', icon:'⏰',
+    titulo:`${vencidos.length} cliente${vencidos.length!==1?'s':''} vencido${vencidos.length!==1?'s':''}`,
+    detalle:'Tócalo para renovar o avisarles por WhatsApp.', accion:()=>irAClientesFiltro('vencido') });
+  if (proximos.length) out.push({ sev:'ambar', icon:'⏳',
+    titulo:`${proximos.length} por vencer pronto`,
+    detalle:'Vencen en los próximos días — adelántate.', accion:()=>irAClientesFiltro('proximo') });
+  if (deben.length) out.push({ sev:'ambar', icon:'💵',
+    titulo:`${deben.length} con pago pendiente`,
+    detalle:'Aún no te han pagado este ciclo.', accion:()=>irAClientesFiltro('debe') });
+
+  // Cuentas llenas / por llenarse (solo admin — el vendedor no compra cuentas).
+  if (MI_ROL === 'admin' && cuentasCargadas && todasCuentas.length) {
+    let llenas = 0, casi = 0;
+    todasCuentas.forEach(c => {
+      const occ = c.slots.filter(s => s && s!=='x' && s!=='X').length;
+      const blq = c.slots.filter(s => s==='x' || s==='X').length;
+      const lib = c.slotsTotal - occ - blq;
+      if (lib <= 0) llenas++; else if (lib === 1) casi++;
+    });
+    if (llenas + casi > 0) {
+      const ps = [];
+      if (llenas) ps.push(`${llenas} llena${llenas!==1?'s':''}`);
+      if (casi) ps.push(`${casi} con 1 libre`);
+      out.push({ sev: llenas>0?'rojo':'ambar', icon:'🔑',
+        titulo:`Cuentas: ${ps.join(' · ')}`,
+        detalle:'Conviene ir comprando otra cuenta.', accion:()=>irASeccion('cuentas') });
+    }
+  }
+
+  // Dinero pendiente (solo si ya se cargó el libro de comisiones).
+  if (ledgerCargado) {
+    if (MI_ROL === 'admin') {
+      let deuda = 0;
+      ['ximenita','saito'].forEach(v => { const s = saldoLedger_(v).saldo; if (s > 0.01) deuda += s; });
+      if (deuda > 0.01) out.push({ sev:'azul', icon:'💰',
+        titulo:`Debes $${deuda.toLocaleString('es-MX',{maximumFractionDigits:2})} a tus vendedores`,
+        detalle:'Comisiones pendientes por pagar.', accion:()=>irASeccion('ganancias') });
+    } else {
+      const s = saldoLedger_(MI_VENDEDOR).saldo;
+      if (s > 0.01) out.push({ sev:'verde', icon:'💰',
+        titulo:`Te deben $${s.toLocaleString('es-MX',{maximumFractionDigits:2})}`,
+        detalle:'Tu comisión pendiente por cobrar.', accion:()=>irASeccion('ganancias') });
+    }
+  }
+  return out;
+}
+
+// Actualiza solo el número rojo de la campana (se llama seguido, es barato).
+function actualizarNotificaciones() {
+  const badge = document.getElementById('notif-badge');
+  const btn = document.getElementById('btn-notif');
+  if (!badge) return;
+  const n = calcularNotificaciones().length;
+  if (n > 0) { badge.textContent = n; badge.style.display = 'flex'; if (btn) btn.classList.add('tiene-alertas'); }
+  else { badge.style.display = 'none'; if (btn) btn.classList.remove('tiene-alertas'); }
+}
+
+function abrirNotificaciones() {
+  _notifsActuales = calcularNotificaciones();
+  const cont = document.getElementById('notif-lista');
+  if (!_notifsActuales.length) {
+    cont.innerHTML = `<div style="text-align:center;padding:26px 10px;">
+      <div style="font-size:42px;">✓</div>
+      <div style="margin-top:8px;font-weight:700;color:var(--text2);">Todo en orden</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:2px;">No hay nada urgente ahorita.</div></div>`;
+  } else {
+    cont.innerHTML = _notifsActuales.map((nf,i) => `
+      <div class="notif-item notif-${nf.sev}" onclick="ejecutarNotif(${i})">
+        <div class="notif-icon">${nf.icon}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="notif-titulo">${nf.titulo}</div>
+          <div class="notif-detalle">${nf.detalle}</div>
+        </div>
+        <div class="notif-chevron">›</div>
+      </div>`).join('');
+  }
+  document.getElementById('modal-notif').classList.add('open');
+}
+
+function ejecutarNotif(i) {
+  const nf = _notifsActuales[i];
+  cerrarModal('modal-notif');
+  if (nf && nf.accion) nf.accion();
+}
+
+// Navega a una sección desde una notificación (resaltando su pestaña).
+function irASeccion(sec) {
+  const tab = document.getElementById('tab-'+sec);
+  mostrarSeccion(sec, tab);
+  try { window.scrollTo(0,0); } catch(e){}
+}
+// Va a Clientes y aplica un filtro concreto (vencido / proximo / debe).
+function irAClientesFiltro(f) {
+  irASeccion('clientes');
+  const btn = [...document.querySelectorAll('#filtros-clientes .f-btn')]
+    .find(b => (b.getAttribute('onclick')||'').includes("setFiltro('"+f+"'"));
+  if (btn) setFiltro(f, btn);
 }
 
 // Banner de progreso al abrir Clientes. Solo muestra algo cuando hay una
@@ -1993,6 +2132,7 @@ function marcarPagado(id) {
         toast('Marcado como pagado', 'success', '✅');
         cerrarModal('modal-detalle');
         filtrar();
+        actualizarNotificaciones();
       } else { toast('No se pudo actualizar', 'error'); }
     })
     .catch(() => toast('No se pudo actualizar', 'error'));
@@ -2319,6 +2459,7 @@ function cargarCuentasBackground() {
     .then(res => {
       todasCuentas = mapearCuentas_(res.rows);
       cuentasCargadas = true;
+      actualizarNotificaciones();
     }).catch(() => {});
 }
 
@@ -2337,6 +2478,7 @@ function cargarCuentas(forzar) {
       cuentasCargadas = true;
       renderFiltrosPlat();
       renderCuentas();
+      actualizarNotificaciones();
     })
     .catch(() => {
       document.getElementById('cuentas-content').innerHTML = '<div class="error-msg">⚠️ No se pudieron cargar las cuentas.</div>';
@@ -2975,7 +3117,7 @@ function cargarVentasUnicas() {
 function cargarLedger() {
   return fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'ledger',key:APP_KEY})})
     .then(r=>r.json())
-    .then(res=>{ todasComisiones = res.rows||[]; })
+    .then(res=>{ todasComisiones = res.rows||[]; ledgerCargado = true; actualizarNotificaciones(); })
     .catch(()=>{ todasComisiones = []; });
 }
 
@@ -3804,6 +3946,7 @@ function hacerLogin() {
         aplicarPermisosUI();
         cargarDatos();
         cargarCuentasBackground();
+        cargarLedger();
         sincronizarComisionesServidor();
         sincronizarCombosServidor();
       } else {
@@ -3942,6 +4085,7 @@ window.addEventListener('resize', () => {
         aplicarPermisosUI();
         cargarDatos();
         cargarCuentasBackground();
+        cargarLedger();
         sincronizarComisionesServidor();
         sincronizarCombosServidor();
       } else {
@@ -3982,6 +4126,17 @@ window.addEventListener('resize', () => {
     <p id="cola-wa-info" style="color:var(--text2);font-size:14px;line-height:1.5;margin-bottom:18px;"></p>
     <button class="btn-primary" id="btn-cola-siguiente" onclick="abrirSiguienteWhatsApp()" style="background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 18px -4px rgba(52,211,153,0.5);margin-bottom:8px;">Abrir el siguiente ▶</button>
     <button class="btn-secondary" id="btn-cola-terminar" onclick="cerrarColaWhatsApp(true)">Terminar</button>
+  </div>
+</div>
+
+<!-- Panel de notificaciones -->
+<div class="modal-overlay" id="modal-notif">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <div class="modal-title">🔔 Notificaciones</div>
+      <button class="modal-close" onclick="cerrarModal('modal-notif')">✕</button>
+    </div>
+    <div id="notif-lista"></div>
   </div>
 </div>
 </body>
