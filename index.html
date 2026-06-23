@@ -2,8 +2,15 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Cuentas Streaming</title>
+<!-- PWA: instalable en el celular como app -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#08080d">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cuentas">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -421,7 +428,6 @@ body {
 .cuenta-card {
   background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--radius-md);
   margin-bottom: 10px; overflow: hidden; transition: border-color 0.2s;
-  animation: fadeUp 0.4s var(--ease) both;
 }
 .cuenta-card:hover { border-color: var(--border-strong); }
 /* Aviso de cuentas llenas / por llenarse */
@@ -500,6 +506,16 @@ body {
 .resumen-mes .rm-num { font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; line-height: 1; margin-bottom: 5px; }
 .resumen-mes .rm-lbl { font-size: 11.5px; color: var(--text3); line-height: 1.4; }
 @media (max-width: 420px) { .resumen-mes .rm-grid { grid-template-columns: 1fr; gap: 12px; } }
+
+/* Gráfica de crecimiento (barras por mes) */
+.grafica-wrap { background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px; }
+.grafica-titulo { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text2); margin-bottom: 14px; }
+.grafica-barras { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; height: 110px; }
+.gb-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.gb-val { font-size: 12px; font-weight: 700; color: var(--text2); margin-bottom: 4px; }
+.gb-bar { width: 100%; max-width: 34px; background: linear-gradient(180deg, var(--violet), var(--violet2)); border-radius: 6px 6px 0 0; }
+.gb-lbl { font-size: 11px; color: var(--text3); margin-top: 6px; }
+.grafica-nota { font-size: 11px; color: var(--text3); margin-top: 12px; }
 
 .pending-hero {
   position: relative; overflow: hidden;
@@ -659,6 +675,7 @@ body {
 
 <div class="nav-tabs" id="nav-tabs">
   <div class="nav-tab active" id="tab-clientes" onclick="mostrarSeccion('clientes', this)">👥 Clientes</div>
+  <div class="nav-tab" id="tab-hoy" onclick="mostrarSeccion('hoy', this)">📋 Hoy</div>
   <div class="nav-tab" id="tab-cuentas" onclick="mostrarSeccion('cuentas', this)">🔑 Cuentas</div>
   <div class="nav-tab" id="tab-catalogo" onclick="mostrarSeccion('catalogo', this)">📦 Catálogo</div>
   <div class="nav-tab" id="tab-ganancias" onclick="mostrarSeccion('ganancias', this)">📊 Ganancias</div>
@@ -706,12 +723,25 @@ body {
   </div>
 </div>
 
+<!-- SECCIÓN TAREAS DE HOY -->
+<div id="sec-hoy" class="section-hidden">
+  <div class="content" style="padding-top:20px;">
+    <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk';margin-bottom:4px;">📋 Tareas de hoy</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px;">A quién contactar hoy. Toca 💬 para abrir el WhatsApp con el mensaje listo.</div>
+    <div id="tareas-content"><div class="loading">Cargando...</div></div>
+  </div>
+</div>
+
 <!-- SECCIÓN CUENTAS -->
 <div id="sec-cuentas" class="section-hidden">
   <div class="content" style="padding-top:20px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk';">Cuentas</div>
       <button id="btn-nueva-cuenta" onclick="abrirModalNuevaCuenta()" class="btn-primary" style="width:auto;margin-top:0;padding:9px 16px;font-size:13px;">+ Nueva cuenta</button>
+    </div>
+    <div class="search-wrap" style="margin-bottom:12px;">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="buscar-cuenta" placeholder="Buscar cuenta, correo o cliente..." oninput="renderCuentas()">
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;" id="filtros-plataforma"></div>
     <div id="cuentas-content"><div class="loading">Cargando cuentas...</div></div>
@@ -1419,6 +1449,7 @@ function mostrarSeccion(sec, btn) {
   if (btn) btn.classList.add('active');
   // Cada sección usa lo que ya tenga en memoria si está cargado (instantáneo).
   // La primera vez sí descarga; después, navegar entre pestañas es inmediato.
+  if (sec==='hoy') renderTareasHoy();
   if (sec==='cuentas') cargarCuentas();          // cargarCuentas ya respeta caché
   if (sec==='catalogo') cargarCatalogo();
   if (sec==='ganancias') {
@@ -1492,10 +1523,42 @@ function cargarHistorialMensual() {
     });
 }
 
+// Gráfica de crecimiento: barras de "altas y renovaciones" por mes (últimos 6
+// meses), calculadas desde los clientes — siempre disponible, no depende de los
+// cortes mensuales.
+function graficaCrecimientoHTML() {
+  const now = new Date();
+  const cortos = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const meses = [];
+  for (let k=5; k>=0; k--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-k, 1);
+    meses.push({ y:d.getFullYear(), m:d.getMonth(), label:cortos[d.getMonth()], n:0 });
+  }
+  todosClientes.forEach(c => {
+    if (c.estado_raw==='ARCHIVADO') return;
+    const f = parseFecha(c.inicio); if(!f) return;
+    const mm = meses.find(x => x.y===f.getFullYear() && x.m===f.getMonth());
+    if (mm) mm.n++;
+  });
+  const max = Math.max(1, ...meses.map(x=>x.n));
+  return `<div class="grafica-wrap">
+    <div class="grafica-titulo">📈 Movimiento de los últimos 6 meses</div>
+    <div class="grafica-barras">
+      ${meses.map(x=>`<div class="gb-col">
+        <div class="gb-val">${x.n}</div>
+        <div class="gb-bar" style="height:${Math.round((x.n/max)*80)+4}px;"></div>
+        <div class="gb-lbl">${x.label}</div>
+      </div>`).join('')}
+    </div>
+    <div class="grafica-nota">Altas y renovaciones por mes (clientes con inicio en cada mes).</div>
+  </div>`;
+}
+
 function renderHistorialMensual() {
   const cont = document.getElementById('historial-mensual-content');
+  const grafica = graficaCrecimientoHTML();
   if (!todosCortesMensuales.length) {
-    cont.innerHTML = `<div class="empty">
+    cont.innerHTML = grafica + `<div class="empty">
       <div class="empty-icon">📅</div>
       <div class="empty-title">Aún no hay cortes mensuales</div>
       <div class="empty-sub">El primero se genera solo el día 1 del próximo mes</div>
@@ -1519,7 +1582,7 @@ function renderHistorialMensual() {
   }
   const nombreVendedor = v => v==='ximenita' ? 'Xime' : (v==='yo' ? 'Tú' : v.charAt(0).toUpperCase()+v.slice(1));
 
-  cont.innerHTML = meses.map((mes, i) => {
+  cont.innerHTML = grafica + meses.map((mes, i) => {
     const filas = porMes[mes];
     const totalGenerado = filas.reduce((s,f)=>s+(parseFloat(f['generado_mes'])||0),0);
     const totalPagado = filas.reduce((s,f)=>s+(parseFloat(f['pagado_mes'])||0),0);
@@ -1605,6 +1668,7 @@ function cargarDatos() {
         };
       });
       actualizarMetricas(); actualizarAlerta(); filtrar();
+      if (seccionActual==='hoy') renderTareasHoy();
       const ahora = new Date();
       document.getElementById('ultima-act').textContent = 'Actualizado '+ahora.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
       if (btn) setTimeout(()=>btn.classList.remove('spinning'), 500);
@@ -1747,6 +1811,49 @@ function irAClientesFiltro(f) {
   const btn = [...document.querySelectorAll('#filtros-clientes .f-btn')]
     .find(b => (b.getAttribute('onclick')||'').includes("setFiltro('"+f+"'"));
   if (btn) setFiltro(f, btn);
+}
+
+// ===== Tareas de hoy =====
+// Tu rutina del día: a quién contactar (vencidos, por vencer) y a quién cobrar
+// (pago pendiente), cada uno con su botón de WhatsApp listo.
+function renderTareasHoy() {
+  const cont = document.getElementById('tareas-content');
+  const activos = todosClientes.filter(c => c.estado_raw !== 'ARCHIVADO');
+  const dias_ = c => (c.dias===null ? 99 : c.dias);
+  const vencidos = activos.filter(c => c.estado === 'vencido').sort((a,b)=>dias_(a)-dias_(b));
+  const proximos = activos.filter(c => c.estado === 'proximo').sort((a,b)=>dias_(a)-dias_(b));
+  const deben = activos.filter(c => (c.pago||'').toUpperCase() === 'PENDIENTE');
+
+  if (!vencidos.length && !proximos.length && !deben.length) {
+    cont.innerHTML = `<div class="empty"><div class="empty-icon">🎉</div><div class="empty-title">Nada pendiente hoy</div><div class="empty-sub">No hay vencidos, por vencer ni pagos pendientes. ¡Disfruta!</div></div>`;
+    return;
+  }
+
+  const fila = c => {
+    const col = colorAvatar(c.cliente);
+    const sub = c.estado==='vencido' ? `Venció hace ${Math.abs(c.dias)} día${Math.abs(c.dias)!==1?'s':''}`
+      : c.estado==='proximo' ? (c.dias===0?'Vence hoy':`Vence en ${c.dias} día${c.dias!==1?'s':''}`)
+      : 'Pago pendiente';
+    return `<div class="cliente-card" onclick="verDetalle('${c.id}')">
+      <div class="avatar" style="background:${col.bg};color:${col.color};">${iniciales(c.cliente)}</div>
+      <div class="info">
+        <div class="nombre">${c.cliente}</div>
+        <div class="sub">${c.paquete||'Sin paquete'} · ${sub}</div>
+      </div>
+      ${c.contacto ? `<div class="wa-btn" onclick="abrirWhatsApp('${c.id}',event)" title="WhatsApp">💬</div>` : ''}
+    </div>`;
+  };
+
+  const bloque = (titulo, icono, arr, color) => arr.length ? `
+    <div style="margin-bottom:18px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:${color};margin-bottom:8px;">${icono} ${titulo} (${arr.length})</div>
+      <div class="lista">${arr.map(fila).join('')}</div>
+    </div>` : '';
+
+  cont.innerHTML =
+    bloque('Vencidos — renovar', '⏰', vencidos, 'var(--red)') +
+    bloque('Por vencer pronto', '⏳', proximos, 'var(--amber)') +
+    bloque('Pendientes de cobro', '💵', deben, 'var(--amber)');
 }
 
 // Banner de progreso al abrir Clientes. Solo muestra algo cuando hay una
@@ -2514,15 +2621,37 @@ function setFiltroPlat(plat, btn) {
   renderCuentas();
 }
 
+function nombreClientePorId_(id) {
+  const c = todosClientes.find(x => x.id === id);
+  return c ? c.cliente : '';
+}
+
 function renderCuentas() {
   let lista = todasCuentas;
   if (filtroPlatActual !== 'TODAS') lista = lista.filter(c => c.plataforma === filtroPlatActual);
 
+  // Buscar por nombre de cuenta, correo, plataforma o por el cliente que ocupa
+  // algún slot (por su nombre o su ID). Útil para "¿quién está en Netflix E?".
+  const elBuscar = document.getElementById('buscar-cuenta');
+  const q = (elBuscar && elBuscar.value || '').trim().toLowerCase();
+  if (q) {
+    lista = lista.filter(c => {
+      if ((c.nombre||'').toLowerCase().includes(q)) return true;
+      if ((c.correo||'').toLowerCase().includes(q)) return true;
+      if ((c.plataforma||'').toLowerCase().includes(q)) return true;
+      return c.slots.slice(0, c.slotsTotal).some(s => {
+        if (!s || s==='x' || s==='X') return false;
+        if (s.toLowerCase().includes(q)) return true;
+        return nombreClientePorId_(s).toLowerCase().includes(q);
+      });
+    });
+  }
+
   if (!lista.length) {
     document.getElementById('cuentas-content').innerHTML = `<div class="empty">
       <div class="empty-icon">🔑</div>
-      <div class="empty-title">Todavía no hay cuentas</div>
-      <div class="empty-sub">Agrega tu primera cuenta de streaming desde Configuración</div>
+      <div class="empty-title">${q ? 'Sin resultados' : 'Todavía no hay cuentas'}</div>
+      <div class="empty-sub">${q ? 'Ninguna cuenta o cliente coincide con tu búsqueda.' : 'Agrega tu primera cuenta de streaming desde Configuración'}</div>
     </div>`;
     return;
   }
@@ -4093,6 +4222,13 @@ window.addEventListener('resize', () => {
       }
     }).catch(()=>{});
 })();
+
+// Service worker: habilita instalar la app en el cel y que abra aunque no haya
+// internet (muestra la última versión cargada). Se sirve desde 'sw.js' junto al
+// HTML. Si no existe el archivo, simplemente no pasa nada.
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
 
 </script>
 
