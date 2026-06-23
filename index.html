@@ -400,6 +400,13 @@ body {
   animation: fadeUp 0.4s var(--ease) both;
 }
 .cuenta-card:hover { border-color: var(--border-strong); }
+/* Aviso de cuentas llenas / por llenarse */
+.cuenta-card.card-llena { border-color: rgba(251,113,133,0.5); box-shadow: inset 3px 0 0 var(--red); }
+.cuenta-card.card-casi { border-color: rgba(251,191,36,0.45); box-shadow: inset 3px 0 0 var(--amber); }
+.cuenta-badge { font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.04em; display: inline-block; }
+.cuenta-badge.llena { background: var(--red-bg); color: var(--red); }
+.cuenta-badge.casi { background: var(--amber-bg); color: var(--amber); }
+.cuentas-alerta { background: var(--amber-bg); border: 1px solid rgba(251,191,36,0.3); border-radius: 12px; padding: 11px 14px; font-size: 13px; color: var(--amber); font-weight: 600; margin-bottom: 4px; }
 .cuenta-header { padding: 13px 16px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
 .cuenta-plat { font-size: 13.5px; font-weight: 700; color: var(--text); }
 .cuenta-correo { font-size: 12px; color: var(--text2); margin-top: 2px; }
@@ -461,6 +468,14 @@ body {
 .earn-wrap { display: flex; flex-direction: column; gap: 14px; }
 .earn-top-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 600px) { .earn-top-grid { grid-template-columns: 1fr; } }
+
+/* Resumen del mes (arriba de Ganancias) */
+.resumen-mes { background: var(--surface-solid); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px 16px; }
+.resumen-mes .rm-title { font-size: 12px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px; }
+.resumen-mes .rm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.resumen-mes .rm-num { font-family: 'Space Grotesk'; font-size: 24px; font-weight: 700; line-height: 1; margin-bottom: 5px; }
+.resumen-mes .rm-lbl { font-size: 11.5px; color: var(--text3); line-height: 1.4; }
+@media (max-width: 420px) { .resumen-mes .rm-grid { grid-template-columns: 1fr; gap: 12px; } }
 
 .pending-hero {
   position: relative; overflow: hidden;
@@ -654,13 +669,13 @@ body {
       <button class="f-btn" onclick="setFiltro('activo',this)">Activos</button>
       <button class="f-btn" onclick="setFiltro('proximo',this)">Por vencer</button>
       <button class="f-btn" onclick="setFiltro('vencido',this)">Vencidos</button>
+      <button class="f-btn" onclick="setFiltro('debe',this)">💵 Deben</button>
       <button class="f-btn" id="f-yo" onclick="setFiltro('yo',this)">Mis ventas</button>
       <button class="f-btn" id="f-vendedor" onclick="setFiltro('vendedor',this)">Vendedor</button>
       <button class="f-btn" onclick="setFiltro('archivado',this)">🗂 Archivados</button>
     </div>
     <div class="acciones-row">
       <button class="accion-btn" id="btn-seleccionar" onclick="toggleModoSeleccion()">☑️ Seleccionar</button>
-      <button class="accion-btn" onclick="exportarCSV()">⬇️ Exportar CSV</button>
     </div>
     <div class="lista" id="lista"><div class="loading">Conectando con Google Sheets...</div></div>
   </div>
@@ -1740,6 +1755,7 @@ function obtenerListaFiltrada() {
     if(filtroActual==='activo') lista=lista.filter(c=>c.estado==='activo');
     else if(filtroActual==='proximo') lista=lista.filter(c=>c.estado==='proximo');
     else if(filtroActual==='vencido') lista=lista.filter(c=>c.estado==='vencido');
+    else if(filtroActual==='debe') lista=lista.filter(c=>(c.pago||'').toUpperCase()==='PENDIENTE');
     else if(filtroActual==='yo') lista=lista.filter(c=>c.vendedor.toLowerCase()==='yo');
     else if(filtroActual==='vendedor') lista=lista.filter(c=>c.vendedor.toLowerCase()!=='yo'&&c.vendedor!=='');
   }
@@ -1853,28 +1869,67 @@ function cerrarColaWhatsApp(exito) {
   if (modoSeleccion) toggleModoSeleccion(); // salimos del modo selección al terminar
 }
 
-// Exporta a CSV exactamente la lista que estás viendo (respeta filtro/búsqueda/orden).
-// Lleva BOM para que Excel muestre bien los acentos.
-function exportarCSV() {
-  const lista = obtenerListaFiltrada();
-  if (!lista.length) { toast('No hay clientes que exportar con este filtro', 'error'); return; }
-  const cols = ['ID','Cliente','Contacto','Paquete','Precio','Inicio','Renovación','Vendedor','Pago','Ganancia','Estado','Notas'];
+// Arma un CSV (con BOM para que Excel muestre bien los acentos) y lo descarga.
+function descargarCSV_(cols, filas, nombreBase) {
   const esc = v => {
     const s = (v===undefined||v===null?'':String(v)).replace(/"/g,'""');
     return /[",\n;]/.test(s) ? '"'+s+'"' : s;
   };
-  const filas = lista.map(c=>[
-    c.id, c.cliente, c.contacto, c.paquete, c.precio, c.inicio, c.renovacion,
-    c.vendedor, c.pago, c.ganancia, (c.estado_raw==='ARCHIVADO'?'ARCHIVADO':c.estado), c.notas
-  ].map(esc).join(','));
-  const csv = '﻿' + cols.join(',') + '\n' + filas.join('\n');
+  const csv = '﻿' + cols.map(esc).join(',') + '\n' + filas.map(f=>f.map(esc).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'clientes_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.href = url; a.download = nombreBase + '_' + new Date().toISOString().slice(0,10) + '.csv';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+// Exporta TODOS los clientes (no solo lo filtrado) con datos completos: cuentas
+// asignadas, % y comisión del vendedor, tu ganancia, días restantes, etc., más
+// una fila de TOTALES al final. Solo admin.
+function exportarCSV() {
+  if (MI_ROL !== 'admin') { toast('Solo el administrador puede exportar', 'error'); return; }
+  const lista = todosClientes.slice().sort((a,b)=>idNum_(a)-idNum_(b));
+  if (!lista.length) { toast('No hay clientes que exportar', 'error'); return; }
+  const cols = ['ID','Cliente','Teléfono','Paquete','Precio','Cuenta(s) asignada(s)','Inicio','Renovación','Días restantes','Vendedor','% comisión','Comisión vendedor','Tu ganancia','Estado pago','Estado','Notas'];
+  let totPrecio=0, totComic=0, totGan=0;
+  const filas = lista.map(c=>{
+    const esVend = c.vendedor && c.vendedor.toLowerCase()!=='yo';
+    const paqData = PAQUETES_GANANCIA[c.paquete];
+    const pct = COMISIONES[(c.vendedor||'').toLowerCase()] !== undefined ? COMISIONES[(c.vendedor||'').toLowerCase()] : 100;
+    const comic = (esVend && paqData) ? paqData.gananciaAmigo*(pct/100) : 0;
+    const gan = parseFloat(c.ganancia)||0;
+    const esArch = c.estado_raw==='ARCHIVADO';
+    if (!esArch) { totPrecio += parseFloat(c.precio)||0; totComic += comic; totGan += gan; }
+    return [
+      c.id, c.cliente, c.contacto, c.paquete, c.precio, c.cuenta,
+      c.inicio, c.renovacion, (c.dias===null?'':c.dias),
+      c.vendedor, (esVend?pct+'%':'—'), (esVend?comic.toFixed(2):'0.00'),
+      gan.toFixed(2), c.pago, (esArch?'ARCHIVADO':c.estado), c.notas
+    ];
+  });
+  // Fila de totales (solo cuenta activos, no archivados).
+  filas.push(['','TOTALES (activos)','','',totPrecio.toFixed(2),'','','','','','',totComic.toFixed(2),totGan.toFixed(2),'','','']);
+  descargarCSV_(cols, filas, 'clientes');
   toast('Exportados '+lista.length+' clientes', 'success', '⬇️');
+}
+
+// Respaldo de cuentas: correos, contraseñas, cuenta de pago y ocupación de
+// slots. Solo admin. Si las cuentas no están cargadas, las baja primero.
+function exportarCuentas() {
+  if (MI_ROL !== 'admin') { toast('Solo el administrador puede exportar', 'error'); return; }
+  const hacer = () => {
+    if (!todasCuentas.length) { toast('No hay cuentas que exportar', 'error'); return; }
+    const cols = ['Nombre','Plataforma','Correo','Contraseña','Cuenta de pago','Slots totales','Ocupados','Libres','Clientes en slots'];
+    const filas = todasCuentas.map(c=>{
+      const usados = c.slots.slice(0,c.slotsTotal).filter(s=>s && s.trim());
+      return [c.nombre, c.plataforma, c.correo, c.contrasena, c.cuentaPago, c.slotsTotal, usados.length, c.slotsTotal-usados.length, usados.join(' / ')];
+    });
+    descargarCSV_(cols, filas, 'cuentas');
+    toast('Exportadas '+filas.length+' cuentas', 'success', '🔑');
+  };
+  if (cuentasCargadas) hacer();
+  else { toast('Cargando cuentas...'); cargarCuentasBackground().then(hacer); }
 }
 
 function verDetalle(id) {
@@ -1903,7 +1958,7 @@ function verDetalle(id) {
       <div><div class="detalle-label">Vendedor</div><div class="detalle-value">${c.vendedor||'—'}</div></div>
       <div><div class="detalle-label">Inicio</div><div class="detalle-value">${c.inicio||'—'}</div></div>
       <div><div class="detalle-label">Renovación</div><div class="detalle-value">${c.renovacion||'—'}</div></div>
-      <div><div class="detalle-label">Pago</div><div class="detalle-value">${c.pago||'—'}</div></div>
+      <div><div class="detalle-label">Pago</div><div class="detalle-value" style="${(c.pago||'').toUpperCase()==='PENDIENTE'?'color:var(--red);font-weight:700;':''}">${c.pago||'—'}</div></div>
       ${MI_ROL==='admin'
         ? `<div><div class="detalle-label">Tu ganancia</div><div class="detalle-value" style="color:var(--green);font-weight:700;">${ganancia>0?'$'+ganancia.toFixed(2):'—'}</div></div>
            ${esVendedor ? `<div><div class="detalle-label">Comisión ${c.vendedor} (${pctVendedor}%)</div><div class="detalle-value" style="color:var(--amber);font-weight:700;">${comisionVend>0?'$'+comisionVend.toFixed(2):'—'}</div></div><div></div>` : ''}`
@@ -1914,10 +1969,33 @@ function verDetalle(id) {
   const esArchivado = c.estado_raw==='ARCHIVADO';
   document.getElementById('d-contenido').innerHTML += esArchivado ? `
     <button onclick="reactivarCliente('${c.id}')" class="btn-secondary green" style="margin-top:4px;">✅ Reactivar cliente</button>` : `
-    <button onclick="abrirRenovar('${c.id}')" class="btn-primary" style="margin-top:4px;background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 18px -4px rgba(52,211,153,0.5);">🔁 Renovar cliente</button>
+    ${(c.pago||'').toUpperCase()==='PENDIENTE' ? `<button onclick="marcarPagado('${c.id}')" class="btn-secondary green" style="margin-top:4px;">✅ Marcar como pagado</button>` : ''}
+    <button onclick="abrirRenovar('${c.id}')" class="btn-primary" style="margin-top:8px;background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 18px -4px rgba(52,211,153,0.5);">🔁 Renovar cliente</button>
     <button onclick="abrirEditar('${c.id}')" class="btn-primary" style="margin-top:8px;">✏️ Editar cliente</button>
     <button onclick="confirmarArchivar('${c.id}')" class="btn-secondary">Archivar cliente</button>`;
   document.getElementById('modal-detalle').classList.add('open');
+}
+
+// Marca un cliente como PAGADO sin abrir el editor completo. NO toca el libro de
+// comisiones (eso ya se abonó al registrar/renovar); solo cambia el estado de
+// pago. Reenvía los datos actuales para no borrar nada (notas, ganancia, etc.).
+function marcarPagado(id) {
+  const c = todosClientes.find(x => x.id === id);
+  if (!c) return;
+  postDatos({accion:'editarCliente', key:APP_KEY, id,
+    estado: c.estado_raw==='ARCHIVADO'?'ARCHIVADO':'ACTIVO',
+    cliente:c.cliente, contacto:c.contacto, paquete:c.paquete, precio:c.precio,
+    cuenta:c.cuenta, inicio:c.inicio, renovacion:c.renovacion, vendedor:c.vendedor,
+    pago:'PAGADO', notas:c.notas||''})
+    .then(res => {
+      if (res.status === 'ok') {
+        c.pago = 'PAGADO';
+        toast('Marcado como pagado', 'success', '✅');
+        cerrarModal('modal-detalle');
+        filtrar();
+      } else { toast('No se pudo actualizar', 'error'); }
+    })
+    .catch(() => toast('No se pudo actualizar', 'error'));
 }
 
 function poblarSelectsPaquetes() {
@@ -2150,13 +2228,23 @@ function calcularGanancia() {
   document.getElementById('ganancia-preview').style.display='flex';
 }
 
-function guardarCliente() {
+async function guardarCliente() {
   const cliente=document.getElementById('n-cliente').value.trim();
   const paquete=document.getElementById('n-paquete').value;
   const inicio=document.getElementById('n-inicio').value;
   if(!cliente||!paquete||!inicio){
     document.getElementById('form-status').innerHTML='<div class="error-msg">⚠️ Completa los campos obligatorios: nombre, paquete y fecha de inicio.</div>';
     return;
+  }
+  // Aviso de duplicado: si el teléfono ya existe en otro cliente activo,
+  // confirmamos antes de registrar — evita meter dos veces a la misma persona.
+  const telNuevo=document.getElementById('n-contacto').value.replace(/\D/g,'');
+  if(telNuevo){
+    const dup=todosClientes.find(x=>x.estado_raw!=='ARCHIVADO' && (x.contacto||'').replace(/\D/g,'')===telNuevo);
+    if(dup){
+      const ok=await confirmar('Ya tienes un cliente con ese teléfono:\n\n"'+dup.cliente+'" ('+(dup.paquete||'sin paquete')+').\n\n¿Registrar de todas formas?');
+      if(!ok) return;
+    }
   }
   const partes=paquete.split('|');
   const vendedor=document.getElementById('n-vendedor').value.toLowerCase();
@@ -2303,7 +2391,23 @@ function renderCuentas() {
     grupos[c.plataforma].push(c);
   });
 
-  let html = '';
+  // Aviso de cuentas llenas o por llenarse — para saber cuándo comprar otra.
+  let nLlenas=0, nCasi=0;
+  lista.forEach(c => {
+    const occ = c.slots.filter(s => s && s!=='x' && s!=='X').length;
+    const blq = c.slots.filter(s => s==='x' || s==='X').length;
+    const lib = c.slotsTotal - occ - blq;
+    if (lib<=0) nLlenas++; else if (lib===1) nCasi++;
+  });
+  let bannerHTML = '';
+  if (nLlenas+nCasi > 0) {
+    const partes = [];
+    if (nLlenas>0) partes.push(`${nLlenas} llena${nLlenas!==1?'s':''}`);
+    if (nCasi>0) partes.push(`${nCasi} con 1 slot libre`);
+    bannerHTML = `<div class="cuentas-alerta">⚠️ ${partes.join(' · ')} — conviene ir comprando otra cuenta.</div>`;
+  }
+
+  let html = bannerHTML;
   Object.keys(grupos).forEach(plat => {
     html += `<div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin:18px 0 8px;">${PLAT_ICONS[plat]||'📦'} ${plat}</div>`;
     grupos[plat].forEach((c, idx) => {
@@ -2316,7 +2420,13 @@ function renderCuentas() {
         return '<div class="slot-mini ocupado" title="Ocupado"></div>';
       }).join('');
       const cardId = `cuenta-${plat}-${idx}`.replace(/\s/g,'_');
-      html += `<div class="cuenta-card">
+      const claseLlena = libres<=0 ? ' card-llena' : (libres===1 ? ' card-casi' : '');
+      const estadoLibres = libres<=0
+        ? '<div class="cuenta-badge llena">LLENA</div>'
+        : (libres===1
+            ? '<div class="cuenta-badge casi">1 libre</div>'
+            : `<div style="font-size:11px;color:var(--green);font-weight:700;">${libres} libres</div>`);
+      html += `<div class="cuenta-card${claseLlena}">
         <div class="cuenta-header" onclick="toggleCuenta('${cardId}')">
           <div>
             <div class="cuenta-plat">${c.nombre}</div>
@@ -2324,7 +2434,7 @@ function renderCuentas() {
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="text-align:right;">
-              <div style="font-size:11px;color:var(--green);font-weight:700;">${libres} libre${libres!==1?'s':''}</div>
+              ${estadoLibres}
               <div style="font-size:11px;color:var(--text3);">${ocupados} ocupado${ocupados!==1?'s':''}</div>
             </div>
             <div class="cuenta-slots-summary">${slotsMini}</div>
@@ -2661,8 +2771,48 @@ function renderGanancias() {
   const heroLabel = MI_ROL==='admin' ? (vendedores.length>1 ? 'Pendiente por pagar a tu equipo' : `Pendiente por pagar a ${vendedores[0]==='ximenita'?'Xime':vendedores[0]}`) : 'Tu pendiente por cobrar';
   const heroSub = todoAlCorriente ? 'Al corriente — nada pendiente ✓' : `${Math.round(pctPagado)}% de lo generado ya está pagado`;
 
+  // ===== Resumen del mes en curso =====
+  // "Altas y renovaciones": clientes cuyo INICIO de ciclo cae en este mes (un
+  // alta nueva y una renovación ambas ponen inicio = hoy). Dinero: ganancia
+  // tuya (admin) o comisión (vendedor) generada por esos clientes este mes.
+  const _now = new Date();
+  const _mA = _now.getMonth(), _aA = _now.getFullYear();
+  const _mP = _mA===0?11:_mA-1, _aP = _mA===0?_aA-1:_aA;
+  let nuevosMes=0, nuevosPrev=0, generadoMes=0;
+  todosClientes.forEach(c=>{
+    if(c.estado_raw==='ARCHIVADO') return;
+    const f = parseFecha(c.inicio); if(!f) return;
+    if(f.getMonth()===_mA && f.getFullYear()===_aA){
+      nuevosMes++;
+      if(MI_ROL==='admin'){ generadoMes += parseFloat(c.ganancia)||0; }
+      else {
+        const pd = PAQUETES_GANANCIA[c.paquete];
+        const pct = COMISIONES[MI_VENDEDOR]!==undefined?COMISIONES[MI_VENDEDOR]:100;
+        generadoMes += pd ? pd.gananciaAmigo*(pct/100) : 0;
+      }
+    } else if(f.getMonth()===_mP && f.getFullYear()===_aP){ nuevosPrev++; }
+  });
+  const difMes = nuevosMes - nuevosPrev;
+  const _nombresMes = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  const dineroLbl = MI_ROL==='admin' ? 'tu ganancia generada' : 'tu comisión generada';
+  const resumenMesHTML = `
+    <div class="resumen-mes">
+      <div class="rm-title">📅 ${_nombresMes[_mA]} en curso</div>
+      <div class="rm-grid">
+        <div>
+          <div class="rm-num">${nuevosMes}</div>
+          <div class="rm-lbl">altas y renovaciones${difMes!==0?` · <span style="color:${difMes>0?'var(--green)':'var(--red)'};font-weight:700;">${difMes>0?'+':''}${difMes}</span> vs mes pasado`:` · igual que el mes pasado`}</div>
+        </div>
+        <div>
+          <div class="rm-num" style="color:var(--green);">$${generadoMes.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
+          <div class="rm-lbl">${dineroLbl} este mes</div>
+        </div>
+      </div>
+    </div>`;
+
   const heroHTML = `
   <div class="earn-wrap">
+    ${resumenMesHTML}
     <div class="earn-top-grid">
       <div class="pending-hero${todoAlCorriente?' all-paid':''}">
         <div class="ring-wrap">
@@ -2966,6 +3116,7 @@ function renderConfig() {
       <button class="f-btn" onclick="showConfigTab('vendedores',this)">👥 Vendedores</button>
       <button class="f-btn" onclick="showConfigTab('nueva-cuenta',this)">🔑 Nueva cuenta</button>
       <button class="f-btn" onclick="showConfigTab('nuevo-combo',this)">➕ Nuevo combo</button>
+      <button class="f-btn" onclick="showConfigTab('datos',this)">💾 Respaldo</button>
     </div>
 
     <div id="config-paquetes">
@@ -3100,11 +3251,27 @@ function renderConfig() {
         <button class="btn-primary" onclick="guardarNuevoCombo()">Guardar combo</button>
         <div id="ncb-status"></div>
       </div>
+    </div>
+
+    <div id="config-datos" style="display:none;">
+      <div style="font-size:12px;color:var(--text2);margin-bottom:14px;">Descarga un respaldo en CSV (se abre en Excel). Útil por si algo le pasa a la hoja de Google.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div class="cuenta-card" style="padding:14px 15px;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;">👥 Clientes</div>
+          <div style="font-size:11.5px;color:var(--text3);margin-bottom:10px;">Todos los clientes con sus datos, cuentas asignadas, comisión, ganancia y notas.</div>
+          <button class="btn-primary" onclick="exportarCSV()">⬇️ Exportar clientes (CSV)</button>
+        </div>
+        <div class="cuenta-card" style="padding:14px 15px;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px;">🔑 Cuentas</div>
+          <div style="font-size:11.5px;color:var(--text3);margin-bottom:10px;">Correos, contraseñas, cuenta de pago y ocupación de slots de cada cuenta.</div>
+          <button class="btn-primary" onclick="exportarCuentas()" style="background:linear-gradient(135deg,#f59e0b,#f97316);box-shadow:0 6px 18px -4px rgba(245,158,11,0.5);">🔑 Exportar cuentas (CSV)</button>
+        </div>
+      </div>
     </div>`;
 }
 
 function showConfigTab(tab, btn) {
-  document.querySelectorAll('#config-paquetes,#config-vendedores,#config-nueva-cuenta,#config-nuevo-combo').forEach(el => el.style.display='none');
+  document.querySelectorAll('#config-paquetes,#config-vendedores,#config-nueva-cuenta,#config-nuevo-combo,#config-datos').forEach(el => el.style.display='none');
   document.getElementById('config-'+tab).style.display='block';
   document.querySelectorAll('#config-tabs .f-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
