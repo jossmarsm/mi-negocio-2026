@@ -182,6 +182,50 @@ body {
 .f-btn:hover { background: var(--surface-hover); border-color: var(--border-strong); }
 .f-btn.active { background: linear-gradient(135deg, var(--violet), var(--violet2)); color: #fff; border-color: transparent; box-shadow: 0 4px 14px -2px rgba(139,92,246,0.4); }
 
+/* Selector "Ordenar por" (en la barra de búsqueda) */
+.orden-select {
+  border: 1px solid var(--border); background: var(--surface-solid); color: var(--text2);
+  border-radius: var(--radius-sm); padding: 0 10px; font-size: 13px; font-weight: 600;
+  cursor: pointer; outline: none; transition: border-color 0.2s var(--ease);
+}
+.orden-select:hover { border-color: var(--border-strong); }
+
+/* Fila de acciones (Seleccionar / Exportar) */
+.acciones-row { display: flex; gap: 8px; justify-content: flex-end; margin: -6px 0 14px; }
+.accion-btn {
+  padding: 7px 13px; border-radius: 99px; border: 1px solid var(--border); background: var(--surface);
+  font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; transition: all 0.2s var(--ease);
+}
+.accion-btn:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+.accion-btn:active { transform: scale(0.94); }
+.accion-btn.active { background: linear-gradient(135deg, var(--violet), var(--violet2)); color: #fff; border-color: transparent; }
+
+/* Círculo de selección en cada tarjeta (modo selección múltiple) */
+.sel-check {
+  width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border-strong);
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: #fff; transition: all 0.15s var(--ease);
+}
+.sel-check.on { background: var(--violet); border-color: var(--violet); }
+.cliente-card.card-sel { border-color: var(--violet); background: rgba(139,92,246,0.08); }
+
+/* Barra flotante con el conteo y el botón de envío */
+#barra-seleccion {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 400;
+  display: flex; align-items: center; gap: 16px; padding: 12px 16px;
+  background: var(--surface-solid); border: 1px solid var(--border-strong); border-radius: 14px;
+  box-shadow: 0 14px 40px -8px rgba(0,0,0,0.7); font-size: 14px; font-weight: 600; color: var(--text);
+  max-width: calc(100% - 32px);
+}
+#barra-seleccion .bs-cancel {
+  padding: 9px 16px; border-radius: 9px; border: 1px solid var(--border-strong); background: transparent;
+  color: var(--text2); cursor: pointer; font-size: 13px; font-weight: 600;
+}
+#barra-seleccion .bs-send {
+  padding: 9px 16px; border-radius: 9px; border: none; cursor: pointer; font-size: 13px; font-weight: 700;
+  background: linear-gradient(135deg, #34d399, #10b981); color: #fff;
+}
+
 /* ===== Client list & cards ===== */
 .lista { display: flex; flex-direction: column; gap: 8px; }
 .cliente-card {
@@ -595,8 +639,15 @@ body {
     <div class="toolbar">
       <div class="search-wrap">
         <span class="search-icon">🔍</span>
-        <input type="text" id="buscar" placeholder="Buscar cliente, paquete o vendedor..." oninput="filtrar()">
+        <input type="text" id="buscar" placeholder="Buscar cliente, paquete, vendedor o nota..." oninput="filtrar()">
       </div>
+      <select id="orden-clientes" class="orden-select" onchange="setOrden(this.value)" title="Ordenar por">
+        <option value="porvencer">⏳ Por vencer</option>
+        <option value="reciente">🆕 Más recientes</option>
+        <option value="antiguo">📜 Más antiguos</option>
+        <option value="nombre">🔤 Nombre A–Z</option>
+        <option value="ganancia">💰 Mayor ganancia</option>
+      </select>
     </div>
     <div class="filters" id="filtros-clientes">
       <button class="f-btn active" onclick="setFiltro('todos',this)">Todos</button>
@@ -606,6 +657,10 @@ body {
       <button class="f-btn" id="f-yo" onclick="setFiltro('yo',this)">Mis ventas</button>
       <button class="f-btn" id="f-vendedor" onclick="setFiltro('vendedor',this)">Vendedor</button>
       <button class="f-btn" onclick="setFiltro('archivado',this)">🗂 Archivados</button>
+    </div>
+    <div class="acciones-row">
+      <button class="accion-btn" id="btn-seleccionar" onclick="toggleModoSeleccion()">☑️ Seleccionar</button>
+      <button class="accion-btn" onclick="exportarCSV()">⬇️ Exportar CSV</button>
     </div>
     <div class="lista" id="lista"><div class="loading">Conectando con Google Sheets...</div></div>
   </div>
@@ -1089,7 +1144,43 @@ const GESTION_PLATAFORMA = {
 
 let todosClientes = [];
 let filtroActual = 'todos';
+let ordenActual = 'porvencer';   // criterio de orden de la lista de clientes
 let ultimoID = 1073;
+
+// ===== POST al servidor con reintento + manejo de sesión expirada =====
+// Hace la petición y, si falla por red, la reintenta UNA vez sola. Es seguro
+// incluso para operaciones de dinero porque todas llevan opId (el backend
+// ignora un opId repetido, así que un reintento nunca duplica un movimiento).
+function postDatos(payload, intentos) {
+  intentos = intentos === undefined ? 1 : intentos;
+  return fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify(payload)})
+    .then(r => { if (!r.ok) throw new Error('http '+r.status); return r.json(); })
+    .then(res => { if (esErrorAuth_(res)) { forzarRelogin_(); throw new Error('auth'); } return res; })
+    .catch(err => {
+      // No reintentamos un error de sesión (no se arregla repitiendo).
+      if (intentos > 0 && err.message !== 'auth') {
+        return new Promise(r => setTimeout(r, 900)).then(() => postDatos(payload, intentos - 1));
+      }
+      throw err;
+    });
+}
+
+// ¿El servidor rechazó por TOKEN inválido/vencido? Solo 'no auth' significa eso.
+// Ojo: 'No autorizado' es distinto — es un permiso insuficiente (p. ej. un
+// vendedor intentando una acción de admin) con sesión válida, y NO debe sacarte.
+function esErrorAuth_(res) {
+  return res && res.status === 'error' && /no auth/i.test(res.message || '');
+}
+
+// Sesión expirada: limpiamos el token y volvemos a mostrar el login, en vez de
+// dejar la app con datos vacíos y errores genéricos sin explicación.
+function forzarRelogin_() {
+  try { localStorage.removeItem('app_key'); } catch(e){}
+  APP_KEY = '';
+  const ov = document.getElementById('login-overlay');
+  if (ov) ov.style.display = 'flex';
+  toast('Tu sesión expiró. Vuelve a entrar.', 'error', '🔒');
+}
 
 const COLORES = [
   {bg:'#2a2347',color:'#c4b5fd'},{bg:'#13302a',color:'#6ee7b7'},
@@ -1300,10 +1391,19 @@ function mostrarSeccion(sec, btn) {
 // lecturas van juntas con Promise.all para no encadenar esperas.
 function cargarGanancias() {
   document.getElementById('ganancias-content').innerHTML = '<div class="loading">Cargando ganancias...</div>';
-  return Promise.all([cargarPagos(), cargarVentasUnicas(), cargarLedger()]).then(()=>{
-    gananciasCargadas = true;
-    renderGanancias();
-  });
+  // UNA sola llamada al servidor en vez de tres (pagos, ventas y libro juntos).
+  return postDatos({accion:'leerDatosBatch', key:APP_KEY, tipos:['pagos','ventas_unicas','ledger']})
+    .then(res=>{
+      const d = res.datos||{};
+      todosPagos = d['pagos']||[];
+      todasVentasUnicas = d['ventas_unicas']||[];
+      todasComisiones = d['ledger']||[];
+      gananciasCargadas = true;
+      renderGanancias();
+    })
+    .catch(()=>{
+      document.getElementById('ganancias-content').innerHTML = '<div class="error-msg">⚠️ No se pudieron cargar las ganancias.</div>';
+    });
 }
 
 // Botón ↻: recarga SOLO lo que se está viendo ahora mismo (antes recargaba solo
@@ -1440,8 +1540,8 @@ function cargarDatos() {
   const btn = document.getElementById('refresh-btn');
   if (btn) btn.classList.add('spinning');
   document.getElementById('lista').innerHTML = '<div class="loading">Actualizando...</div>';
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'clientes',key:APP_KEY})})
-    .then(r=>{if(!r.ok)throw new Error();return r.json();})
+  restaurarFiltroGuardado();
+  postDatos({accion:'leerDatos',tipo:'clientes',key:APP_KEY})
     .then(res=>{
       const filas = res.rows||[];
       todosClientes = filas.map(f=>{
@@ -1487,6 +1587,10 @@ function actualizarMetricas() {
   const cardProximos = document.getElementById('m-proximos').closest('.metric');
   if (cardVencidos) cardVencidos.classList.toggle('metric-urgente', numVencidos > 0);
   if (cardProximos) cardProximos.classList.toggle('metric-atencion', numVencidos === 0 && numProximos > 0);
+
+  // Alerta en el título de la pestaña del navegador: así ves los vencidos
+  // aunque tengas la app en otra pestaña en segundo plano.
+  document.title = numVencidos > 0 ? '(' + numVencidos + ') Cuentas Streaming' : 'Cuentas Streaming';
 
   renderRacha(activos, numVencidos);
 }
@@ -1596,10 +1700,37 @@ function estadoVacioClientes(busqueda) {
 
 function setFiltro(f,btn) {
   filtroActual=f;
-  document.querySelectorAll('.f-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active'); filtrar();
+  try { localStorage.setItem('filtro_clientes', f); } catch(e){}
+  document.querySelectorAll('#filtros-clientes .f-btn').forEach(b=>b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  filtrar();
 }
-function filtrar() {
+
+// Restaura el último filtro y orden usados (se guardan al cambiarlos). Así si
+// dejas la lista en "Vencidos" y recargas, sigue en "Vencidos".
+function restaurarFiltroGuardado() {
+  let o=''; try { o = localStorage.getItem('orden_clientes')||''; } catch(e){}
+  if (o) { ordenActual = o; const selO=document.getElementById('orden-clientes'); if(selO) selO.value=o; }
+  let f=''; try { f = localStorage.getItem('filtro_clientes')||''; } catch(e){}
+  if (!f) return;
+  filtroActual = f;
+  document.querySelectorAll('#filtros-clientes .f-btn').forEach(b=>{
+    const oc = b.getAttribute('onclick')||'';
+    b.classList.toggle('active', oc.includes("setFiltro('"+f+"'"));
+  });
+}
+
+function setOrden(val) {
+  ordenActual = val;
+  try { localStorage.setItem('orden_clientes', val); } catch(e){}
+  filtrar();
+}
+
+function idNum_(c){ return parseInt((c.id||'').replace('CL-',''))||0; }
+
+// Aplica filtro + búsqueda + orden y devuelve la lista. La usan filtrar() (para
+// pintar) y exportarCSV() (para descargar exactamente lo que estás viendo).
+function obtenerListaFiltrada() {
   const b=(document.getElementById('buscar').value||'').toLowerCase();
   let lista=todosClientes;
   if(filtroActual==='archivado') {
@@ -1612,15 +1743,37 @@ function filtrar() {
     else if(filtroActual==='yo') lista=lista.filter(c=>c.vendedor.toLowerCase()==='yo');
     else if(filtroActual==='vendedor') lista=lista.filter(c=>c.vendedor.toLowerCase()!=='yo'&&c.vendedor!=='');
   }
-  if(b) lista=lista.filter(c=>c.cliente.toLowerCase().includes(b)||c.paquete.toLowerCase().includes(b)||c.vendedor.toLowerCase().includes(b)||c.contacto.includes(b));
-  lista.sort((a,b)=>(a.dias===null?999:a.dias)-(b.dias===null?999:b.dias));
+  if(b) lista=lista.filter(c=>
+    c.cliente.toLowerCase().includes(b) ||
+    c.paquete.toLowerCase().includes(b) ||
+    c.vendedor.toLowerCase().includes(b) ||
+    c.contacto.includes(b) ||
+    (c.notas||'').toLowerCase().includes(b)   // ahora también busca dentro de las notas
+  );
+  lista = lista.slice(); // copia para no reordenar el array original
+  lista.sort((a,b)=>{
+    if(ordenActual==='reciente') return idNum_(b)-idNum_(a);
+    if(ordenActual==='antiguo')  return idNum_(a)-idNum_(b);
+    if(ordenActual==='nombre')   return (a.cliente||'').localeCompare(b.cliente||'','es',{sensitivity:'base'});
+    if(ordenActual==='ganancia') return (parseFloat(b.ganancia)||0)-(parseFloat(a.ganancia)||0);
+    return (a.dias===null?999:a.dias)-(b.dias===null?999:b.dias); // "por vencer" (default)
+  });
+  return lista;
+}
+
+function filtrar() {
+  const b=(document.getElementById('buscar').value||'').toLowerCase();
+  const lista = obtenerListaFiltrada();
   const cont=document.getElementById('lista');
   if(!lista.length){cont.innerHTML=estadoVacioClientes(b);return;}
   cont.innerHTML=lista.map((c)=>{
     const esV=c.vendedor&&c.vendedor.toLowerCase()!=='yo';
     const precio=c.precio?'$'+parseFloat(c.precio).toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2}):'';
     const esArchivado = c.estado_raw==='ARCHIVADO';
-    return `<div class="cliente-card" style="${esArchivado?'opacity:0.55;':''}" onclick="verDetalle('${c.id}')">
+    const sel = seleccionados.has(c.id);
+    const accion = modoSeleccion ? `toggleSeleccion('${c.id}')` : `verDetalle('${c.id}')`;
+    return `<div class="cliente-card${modoSeleccion&&sel?' card-sel':''}" style="${esArchivado?'opacity:0.55;':''}" onclick="${accion}">
+      ${modoSeleccion ? `<div class="sel-check${sel?' on':''}">${sel?'✓':''}</div>` : ''}
       ${esArchivado ? `<div class="avatar" style="background:var(--surface);color:var(--text3);">${iniciales(c.cliente)}</div>` : anilloHTML(c.estado, c.dias)}
       <div class="info">
         <div class="nombre">${c.cliente}${esV?`<span class="v-badge">${c.vendedor}</span>`:''}${esArchivado?'<span style="font-size:10px;padding:2px 7px;border-radius:99px;background:var(--surface);color:var(--text3);">Archivado</span>':''}</div>
@@ -1629,9 +1782,99 @@ function filtrar() {
       <div class="derecha">
         ${esArchivado?'<span class="badge sin-fecha">Archivado</span>':badgeEstado(c.estado,c.dias)}
       </div>
-      ${!esArchivado ? `<div class="wa-btn" onclick="abrirWhatsApp('${c.id}',event)" title="${esClienteReciente(c)?'Enviar bienvenida':'WhatsApp'}">${esClienteReciente(c)?'🎉':'💬'}</div>` : ''}
+      ${!esArchivado && !modoSeleccion ? `<div class="wa-btn" onclick="abrirWhatsApp('${c.id}',event)" title="${esClienteReciente(c)?'Enviar bienvenida':'WhatsApp'}">${esClienteReciente(c)?'🎉':'💬'}</div>` : ''}
     </div>`;
   }).join('');
+}
+
+// ===== Modo selección múltiple (mandar WhatsApp a varios de un jalón) =====
+let modoSeleccion = false;
+const seleccionados = new Set();
+let colaWhatsApp = [];
+
+function toggleModoSeleccion() {
+  modoSeleccion = !modoSeleccion;
+  seleccionados.clear();
+  const btn = document.getElementById('btn-seleccionar');
+  if (btn) { btn.classList.toggle('active', modoSeleccion); btn.textContent = modoSeleccion ? '✕ Cancelar selección' : '☑️ Seleccionar'; }
+  filtrar();
+  actualizarBarraSeleccion();
+}
+
+function toggleSeleccion(id) {
+  if (seleccionados.has(id)) seleccionados.delete(id); else seleccionados.add(id);
+  filtrar();
+  actualizarBarraSeleccion();
+}
+
+function actualizarBarraSeleccion() {
+  const barra = document.getElementById('barra-seleccion');
+  if (!barra) return;
+  if (!modoSeleccion) { barra.style.display = 'none'; return; }
+  barra.style.display = 'flex';
+  document.getElementById('sel-count').textContent = seleccionados.size + ' seleccionado' + (seleccionados.size!==1?'s':'');
+}
+
+// Abre WhatsApp para cada seleccionado, uno por uno. wa.me solo abre un chat por
+// clic (y el navegador bloquea abrir muchas ventanas de golpe), así que vamos en
+// cola: cada "Abrir el siguiente" es un clic tuyo, por eso no se bloquea.
+function enviarWhatsAppSeleccionados() {
+  const conTel = [...seleccionados].map(id=>todosClientes.find(x=>x.id===id)).filter(c=>c&&c.contacto);
+  if (!conTel.length) { toast('Ninguno de los seleccionados tiene teléfono guardado', 'error'); return; }
+  const sinTel = seleccionados.size - conTel.length;
+  colaWhatsApp = conTel.map(c=>c.id);
+  if (sinTel>0) toast(sinTel+' sin teléfono se omitirán', 'success', '⚠️');
+  abrirSiguienteWhatsApp(); // el primero se abre dentro de este clic (no se bloquea)
+}
+
+function abrirSiguienteWhatsApp() {
+  if (!colaWhatsApp.length) { cerrarColaWhatsApp(true); return; }
+  const id = colaWhatsApp.shift();
+  const c = todosClientes.find(x=>x.id===id);
+  if (c && c.contacto) {
+    const limpio = c.contacto.replace(/\D/g,'');
+    const numero = limpio.length===10 ? '52'+limpio : limpio;
+    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensajeWhatsApp(c))}`, '_blank');
+  }
+  const quedan = colaWhatsApp.length;
+  document.getElementById('cola-wa-info').textContent = quedan>0
+    ? `Abriste el chat de ${c?c.cliente:''}. Quedan ${quedan} por abrir.`
+    : `Listo, abriste el último (${c?c.cliente:''}).`;
+  document.getElementById('btn-cola-siguiente').style.display = quedan>0 ? '' : 'none';
+  document.getElementById('btn-cola-terminar').textContent = quedan>0 ? 'Terminar' : 'Cerrar';
+  document.getElementById('modal-cola-wa').classList.add('open');
+}
+
+function cerrarColaWhatsApp(exito) {
+  const modal = document.getElementById('modal-cola-wa');
+  if (modal) modal.classList.remove('open');
+  colaWhatsApp = [];
+  if (exito) toast('Recordatorios abiertos ✅', 'success');
+  if (modoSeleccion) toggleModoSeleccion(); // salimos del modo selección al terminar
+}
+
+// Exporta a CSV exactamente la lista que estás viendo (respeta filtro/búsqueda/orden).
+// Lleva BOM para que Excel muestre bien los acentos.
+function exportarCSV() {
+  const lista = obtenerListaFiltrada();
+  if (!lista.length) { toast('No hay clientes que exportar con este filtro', 'error'); return; }
+  const cols = ['ID','Cliente','Contacto','Paquete','Precio','Inicio','Renovación','Vendedor','Pago','Ganancia','Estado','Notas'];
+  const esc = v => {
+    const s = (v===undefined||v===null?'':String(v)).replace(/"/g,'""');
+    return /[",\n;]/.test(s) ? '"'+s+'"' : s;
+  };
+  const filas = lista.map(c=>[
+    c.id, c.cliente, c.contacto, c.paquete, c.precio, c.inicio, c.renovacion,
+    c.vendedor, c.pago, c.ganancia, (c.estado_raw==='ARCHIVADO'?'ARCHIVADO':c.estado), c.notas
+  ].map(esc).join(','));
+  const csv = '﻿' + cols.join(',') + '\n' + filas.join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'clientes_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+  toast('Exportados '+lista.length+' clientes', 'success', '⬇️');
 }
 
 function verDetalle(id) {
@@ -1948,8 +2191,7 @@ function guardarCliente() {
   btn.disabled=true; btn.textContent='Guardando...';
   document.getElementById('form-status').innerHTML='';
 
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify(datos)})
-    .then(r=>r.json())
+  postDatos(datos)
     .then(res=>{
       if(res.status==='ok'){
         ultimoID++;
@@ -2244,10 +2486,7 @@ function guardarEditarCuenta() {
   const btn = document.getElementById('btn-editar-cuenta');
   btn.disabled = true; btn.textContent = 'Guardando...';
 
-  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify({
-    accion:'editarCuenta', nombreCuenta: cuentaEnEdicion.nombre, correo, contrasena: pass, key: APP_KEY
-  })})
-    .then(r=>r.json())
+  postDatos({accion:'editarCuenta', nombreCuenta: cuentaEnEdicion.nombre, correo, contrasena: pass, key: APP_KEY})
     .then(res=>{
       if (res.status==='ok') {
         // Actualizamos la copia local para que el aviso use ya los datos nuevos
@@ -2635,8 +2874,7 @@ function guardarVentaUnica() {
   const btn = document.getElementById('btn-venta-unica');
   btn.disabled = true; btn.textContent = 'Guardando...';
   const hoy = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'registrarVentaUnica',key:APP_KEY,fecha:hoy,vendedor:vendedor,monto:monto,notas:notas,opId:ventaUnicaOpId})})
-    .then(r=>r.json())
+  postDatos({accion:'registrarVentaUnica',key:APP_KEY,fecha:hoy,vendedor:vendedor,monto:monto,notas:notas,opId:ventaUnicaOpId})
     .then(res=>{
       if(res.status==='ok'){
         status.innerHTML = '<div class="success-box"><p>✅ Venta única registrada</p></div>';
@@ -2668,8 +2906,7 @@ function guardarPago() {
   const btn = document.getElementById('btn-pago');
   btn.disabled = true; btn.textContent = 'Guardando...';
   const hoy = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'registrarPago',key:APP_KEY,fecha:hoy,vendedor:vendedor,concepto:'Pago de comisiones',monto:monto,tipo:'comision',notas:notas,opId:pagoOpId})})
-    .then(r=>r.json())
+  postDatos({accion:'registrarPago',key:APP_KEY,fecha:hoy,vendedor:vendedor,concepto:'Pago de comisiones',monto:monto,tipo:'comision',notas:notas,opId:pagoOpId})
     .then(res=>{
       if(res.status==='ok'){
         status.innerHTML = '<div class="success-box"><p>✅ Pago registrado</p></div>';
@@ -2702,8 +2939,7 @@ function guardarAjuste() {
   if (!nota) { status.innerHTML = '<div class="error-msg">⚠️ Escribe el motivo del ajuste — queda en el registro.</div>'; return; }
   const btn = document.getElementById('btn-ajuste');
   btn.disabled = true; btn.textContent = 'Aplicando...';
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'ajusteComision',key:APP_KEY,vendedor:vendedor,monto:monto,nota:nota,opId:ajusteOpId})})
-    .then(r=>r.json())
+  postDatos({accion:'ajusteComision',key:APP_KEY,vendedor:vendedor,monto:monto,nota:nota,opId:ajusteOpId})
     .then(res=>{
       if(res.status==='ok'){
         status.innerHTML = '<div class="success-box"><p>✅ Ajuste aplicado</p></div>';
@@ -2891,8 +3127,7 @@ function actualizarPaquete(idx, nombre) {
     // lo realmente pagado. Mandamos plataformas solo si el combo ya las tiene
     // (el backend no las borra si no se envían).
     const plats = Array.isArray(PAQUETES_GANANCIA[nombre].plataformas) ? PAQUETES_GANANCIA[nombre].plataformas.join(',') : '';
-    fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'agregarCombo',key:APP_KEY,nombre,precio,gananciaAmigo:amigo,gananciaNeta:neta,plataformas:plats})})
-      .then(r=>r.json())
+    postDatos({accion:'agregarCombo',key:APP_KEY,nombre,precio,gananciaAmigo:amigo,gananciaNeta:neta,plataformas:plats})
       .then(()=>toast('Combo actualizado'))
       .catch(()=>toast('Se guardó local, pero no se pudo sincronizar con Sheets', 'error'));
   }
@@ -2907,7 +3142,7 @@ function actualizarComision(vendedorKey) {
   toast('Comisión de '+(vendedorKey==='ximenita'?'Xime':vendedorKey)+' actualizada a '+pct+'%');
   // Persistir en el backend (hoja config_comisiones) para que el corte
   // mensual automático use el % correcto, no solo este navegador.
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'guardarComision',key:APP_KEY,vendedor:vendedorKey,porcentaje:pct})})
+  postDatos({accion:'guardarComision',key:APP_KEY,vendedor:vendedorKey,porcentaje:pct})
     .catch(()=>{ toast('No se pudo sincronizar el % con el servidor', 'error'); });
 }
 
@@ -3010,8 +3245,7 @@ function guardarNuevoCombo() {
   PAQUETES_GANANCIA[nombre] = {precio, gananciaAmigo:amigo, gananciaNeta:neta, plataformas:plataformasSeleccionadas};
   guardarConfigLocal();
 
-  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify({accion:'agregarCombo', key:APP_KEY, nombre, precio, gananciaAmigo:amigo, gananciaNeta:neta, plataformas:plataformasSeleccionadas.join(',')})})
-    .then(r=>r.json())
+  postDatos({accion:'agregarCombo', key:APP_KEY, nombre, precio, gananciaAmigo:amigo, gananciaNeta:neta, plataformas:plataformasSeleccionadas.join(',')})
     .then(res=>{
       status.innerHTML = '<div class="success-box"><p>✅ Combo guardado y disponible para usar</p></div>';
       toast('Combo "'+nombre+'" agregado');
@@ -3049,8 +3283,7 @@ function guardarNuevaCuenta() {
     slots_total: slots, cuenta_pago: pago
   };
 
-  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify(datos)})
-    .then(r => r.json())
+  postDatos(datos)
     .then(res => {
       if (res.status === 'ok') {
         status.innerHTML = '<div class="success-box"><p>✅ Cuenta guardada correctamente</p></div>';
@@ -3162,8 +3395,7 @@ function guardarRenovacion() {
   const btn = document.getElementById('btn-renovar');
   btn.disabled = true; btn.textContent = 'Guardando...';
 
-  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify(datos)})
-    .then(r => r.json())
+  postDatos(datos)
     .then(res => {
       if (res.status === 'ok') {
         document.getElementById('renovar-status').innerHTML = '<div class="success-box"><p>✅ Renovación registrada</p></div>';
@@ -3291,8 +3523,7 @@ async function guardarEdicion() {
   }
   const btn = document.getElementById('btn-editar');
   btn.disabled = true; btn.textContent = 'Guardando...';
-  fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify(datos)})
-    .then(r => r.json())
+  postDatos(datos)
     .then(res => {
       if (res.status === 'ok') {
         document.getElementById('editar-status').innerHTML = '<div class="success-box"><p>✅ Cambios guardados</p></div>';
@@ -3312,8 +3543,7 @@ function reactivarCliente(id) {
   const c = todosClientes.find(x => x.id === id);
   if (!c) return;
   abrirConfirmacion('Reactivar cliente', `¿Reactivar a ${c.cliente}?`, () => {
-    return fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify({accion:'editarCliente', key:APP_KEY, id, estado:'ACTIVO', cliente:c.cliente, contacto:c.contacto, paquete:c.paquete, precio:c.precio, cuenta:c.cuenta, inicio:c.inicio, renovacion:c.renovacion, vendedor:c.vendedor, pago:c.pago, notas:c.notas||''})})
-      .then(r => r.json())
+    return postDatos({accion:'editarCliente', key:APP_KEY, id, estado:'ACTIVO', cliente:c.cliente, contacto:c.contacto, paquete:c.paquete, precio:c.precio, cuenta:c.cuenta, inicio:c.inicio, renovacion:c.renovacion, vendedor:c.vendedor, pago:c.pago, notas:c.notas||''})
       .then(res => {
         if (res.status==='ok') {
           setEstadoLocal(id, 'ACTIVO');
@@ -3334,8 +3564,7 @@ function confirmarArchivar(id) {
   const c = todosClientes.find(x => x.id === id);
   if (!c) return;
   abrirConfirmacion('Archivar cliente', `¿Archivar a ${c.cliente}? Se liberarán sus slots en todas las cuentas automáticamente.`, () => {
-    return fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify({accion:'archivarCliente', key:APP_KEY, id})})
-      .then(r => r.json())
+    return postDatos({accion:'archivarCliente', key:APP_KEY, id})
       .then(res => {
         if (res.status==='ok') {
           setEstadoLocal(id, 'ARCHIVADO');
@@ -3564,6 +3793,28 @@ window.addEventListener('resize', () => {
       <button id="confirm-cancel" style="padding:9px 20px;border-radius:8px;border:1px solid #555;background:transparent;color:#aaa;cursor:pointer;font-size:14px;">Cancelar</button>
       <button id="confirm-ok" style="padding:9px 20px;border-radius:8px;border:none;background:#7c5cfc;color:#fff;cursor:pointer;font-size:14px;font-weight:600;">Aceptar</button>
     </div>
+  </div>
+</div>
+
+<!-- Barra flotante para el modo selección múltiple -->
+<div id="barra-seleccion" style="display:none;">
+  <span id="sel-count">0 seleccionados</span>
+  <div style="display:flex;gap:8px;">
+    <button class="bs-cancel" onclick="toggleModoSeleccion()">Cancelar</button>
+    <button class="bs-send" onclick="enviarWhatsAppSeleccionados()">📲 Enviar WhatsApp</button>
+  </div>
+</div>
+
+<!-- Modal: abrir los WhatsApp de la selección uno por uno -->
+<div class="modal-overlay" id="modal-cola-wa">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header">
+      <div class="modal-title">📲 Enviar a varios</div>
+      <button class="modal-close" onclick="cerrarColaWhatsApp(false)">✕</button>
+    </div>
+    <p id="cola-wa-info" style="color:var(--text2);font-size:14px;line-height:1.5;margin-bottom:18px;"></p>
+    <button class="btn-primary" id="btn-cola-siguiente" onclick="abrirSiguienteWhatsApp()" style="background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 18px -4px rgba(52,211,153,0.5);margin-bottom:8px;">Abrir el siguiente ▶</button>
+    <button class="btn-secondary" id="btn-cola-terminar" onclick="cerrarColaWhatsApp(true)">Terminar</button>
   </div>
 </div>
 </body>
