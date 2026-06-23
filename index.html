@@ -734,6 +734,10 @@ body {
         <div style="font-family:'Space Grotesk';font-size:17px;color:var(--amber);font-weight:700;" id="g-com">$0</div>
       </div>
     </div>
+    <div class="form-group">
+      <label class="form-label">Nota (opcional)</label>
+      <input class="form-input" id="n-notas" placeholder="Ej. correo y clave de la cuenta, paga tarde...">
+    </div>
     <button class="btn-primary" id="btn-guardar" onclick="guardarCliente()">Guardar cliente</button>
   </div>
 </div>
@@ -1653,6 +1657,7 @@ function abrirModalNuevo() {
   document.getElementById('n-contacto').value='';
   document.getElementById('n-paquete').value='';
   document.getElementById('n-precio').value='';
+  document.getElementById('n-notas').value='';
   document.getElementById('n-cuentas-selects').innerHTML='<div style="font-size:13px;color:var(--text3);">Selecciona primero un paquete...</div>';
   document.getElementById('n-renovacion').value='';
   document.getElementById('n-vendedor').value= MI_ROL==='admin' ? 'YO' : MI_VENDEDOR;
@@ -1886,6 +1891,7 @@ function guardarCliente() {
     vendedor:document.getElementById('n-vendedor').value,
     pago:document.getElementById('n-pago').value,
     ganancia:miGanancia.toFixed(2),
+    notas:document.getElementById('n-notas').value.trim(),
     opId:nuevoClienteOpId,
     key:APP_KEY
   };
