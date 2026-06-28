@@ -3129,31 +3129,28 @@ function renderGanancias() {
   });
   const difMes = nuevosMes - nuevosPrev;
   const _nombresMes = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
-  const dineroLbl = MI_ROL==='admin' ? 'tu ganancia generada' : 'tu comisión generada';
-  // Nota aclaratoria: el número es NETO (ya sin comisión de vendedores) y, en
-  // ventas de varios meses, solo cuenta la parte que toca a este mes.
-  const dineroNota = MI_ROL==='admin'
-    ? 'ya sin comisiones de vendedores · ventas de varios meses repartidas'
-    : 'tu parte de ventas de varios meses se reparte por mes';
-  const resumenMesHTML = `
-    <div class="resumen-mes">
-      <div class="rm-title">📅 ${_nombresMes[_mA]} en curso</div>
-      <div class="rm-grid">
-        <div>
-          <div class="rm-num">${nuevosMes}</div>
-          <div class="rm-lbl">altas y renovaciones${difMes!==0?` · <span style="color:${difMes>0?'var(--green)':'var(--red)'};font-weight:700;">${difMes>0?'+':''}${difMes}</span> vs mes pasado`:` · igual que el mes pasado`}</div>
-        </div>
-        <div>
-          <div class="rm-num" style="color:var(--green);">$${generadoMes.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
-          <div class="rm-lbl">${dineroLbl} este mes</div>
-          <div class="rm-lbl" style="font-size:10px;color:var(--text3);margin-top:2px;opacity:.85;">${dineroNota}</div>
-        </div>
-      </div>
+  const mesNombre = _nombresMes[_mA];
+
+  // ===== HERO: la ganancia REAL del negocio =====
+  // El número grande y principal es la ganancia de TODOS los clientes activos
+  // (lo que de verdad estás generando ahora mismo). Lo de "este mes" pasa a ser
+  // un dato secundario de actividad, para que no compita ni confunda con éste.
+  const heroGananciaHTML = MI_ROL==='admin' ? `
+    <div class="mini-stat" style="background:linear-gradient(135deg,rgba(139,92,246,0.14),rgba(99,102,241,0.05));border:1px solid rgba(139,92,246,0.35);">
+      <div class="lbl">💰 Tu ganancia · clientes activos</div>
+      <div class="val" style="font-size:32px;color:var(--violet2);margin-top:2px;">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
+      <div class="sub" style="margin-top:6px;">Es el total que te dejan ahora mismo tus ${misClientes} clientes activos, ya descontadas las comisiones de tus vendedores.</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:6px;">${misClientesDirectos} propias directas · ${misClientes-misClientesDirectos} de tus vendedores${misVentasUnicasMes>0.001 ? ` · <span style="color:var(--green);font-weight:600;">+ $${misVentasUnicasMes.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})} en ventas únicas de ${mesNombre}</span>` : ''}</div>
+    </div>` : `
+    <div class="mini-stat" style="background:linear-gradient(135deg,rgba(139,92,246,0.14),rgba(99,102,241,0.05));border:1px solid rgba(139,92,246,0.35);">
+      <div class="lbl">💰 Tu ganancia · clientes activos</div>
+      <div class="val" style="font-size:32px;color:var(--violet2);margin-top:2px;">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
+      <div class="sub" style="margin-top:6px;">Es lo que te corresponde ahora mismo de tus ${misClientes} clientes activos.</div>
     </div>`;
 
   const heroHTML = `
   <div class="earn-wrap">
-    ${resumenMesHTML}
+    ${heroGananciaHTML}
     <div class="earn-top-grid">
       <div class="pending-hero${todoAlCorriente?' all-paid':''}">
         <div class="ring-wrap">
@@ -3173,23 +3170,17 @@ function renderGanancias() {
           <div class="sub">${heroSub}</div>
         </div>
       </div>
-      ${MI_ROL==='admin' ? `
       <div class="mini-stat">
-        <div class="lbl">Ingresos totales del negocio</div>
-        <div class="val">$${total.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
-      </div>` : `
-      <div class="mini-stat">
-        <div class="lbl">Tu ganancia (clientes activos)</div>
-        <div class="val" style="color:var(--violet2);">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
-      </div>`}
-    </div>
-    ${MI_ROL==='admin' ? `<div class="mini-stat" style="flex-direction:row;align-items:center;justify-content:space-between;">
-      <div>
-        <div class="lbl">Tu ganancia total del negocio (clientes activos)</div>
-        <div class="val" style="margin-top:3px;">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
-        ${misVentasUnicasMes>0.001 ? `<div style="font-size:12px;color:var(--green);margin-top:4px;">+ ventas únicas este mes: $${misVentasUnicasMes.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>` : `<div style="font-size:12px;color:var(--text3);margin-top:4px;">+ ventas únicas este mes: $0.00</div>`}
+        <div class="lbl">📅 ${mesNombre} en curso</div>
+        <div class="val">${nuevosMes}</div>
+        <div class="sub">altas y renovaciones${difMes!==0?` · <span style="color:${difMes>0?'var(--green)':'var(--red)'};font-weight:700;">${difMes>0?'+':''}${difMes}</span> vs mes pasado`:` · igual que el mes pasado`}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:5px;">≈ $${generadoMes.toLocaleString('es-MX',{maximumFractionDigits:0})} de ganancia corresponden a ${mesNombre}</div>
       </div>
-      <div style="font-size:11.5px;color:var(--text2);text-align:right;">${misClientesDirectos} propias directas<br>${misClientes-misClientesDirectos} de tus vendedores</div>
+    </div>
+    ${MI_ROL==='admin' ? `
+    <div class="mini-stat">
+      <div class="lbl">🏦 Ingresos totales del negocio (todo lo cobrado)</div>
+      <div class="val">$${total.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
     </div>` : ''}
     <div style="display:flex;flex-direction:column;gap:10px;">
       ${vendedores.map(v => vendorCardHTML(v, resumen[v], historialPorVendedor[v])).join('')}
