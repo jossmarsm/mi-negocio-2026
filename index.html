@@ -1164,6 +1164,12 @@ body {
 
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw_r9t-i8Y0Mv6U78gVOg1eOYVy7r40qjQXXU8kicBaiot3c-S9Q6zF6-33b1FxgLqN0A/exec';
+
+// Escapa caracteres HTML para que datos del usuario en innerHTML no ejecuten
+// código. Usar siempre que se inyecte nombre, nota, cuenta, etc. de Sheets.
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 // Link que se incluye en el WhatsApp de bienvenida al cliente nuevo — publicación
 // de Facebook con recomendaciones de otros clientes, para dar confianza.
 const LINK_BIENVENIDA = 'https://www.facebook.com/share/p/1LpUAnuuGm/';
@@ -1849,8 +1855,8 @@ function renderTareasHoy() {
     return `<div class="cliente-card" onclick="verDetalle('${c.id}')">
       <div class="avatar" style="background:${col.bg};color:${col.color};">${iniciales(c.cliente)}</div>
       <div class="info">
-        <div class="nombre">${c.cliente}</div>
-        <div class="sub">${c.paquete||'Sin paquete'} · ${sub}</div>
+        <div class="nombre">${esc(c.cliente)}</div>
+        <div class="sub">${esc(c.paquete||'Sin paquete')} · ${sub}</div>
       </div>
       ${c.contacto ? `<div class="wa-btn" onclick="abrirWhatsApp('${c.id}',event)" title="WhatsApp">💬</div>` : ''}
     </div>`;
@@ -2050,8 +2056,8 @@ function filtrar() {
       ${modoSeleccion ? `<div class="sel-check${sel?' on':''}">${sel?'✓':''}</div>` : ''}
       ${esArchivado ? `<div class="avatar" style="background:var(--surface);color:var(--text3);">${iniciales(c.cliente)}</div>` : anilloHTML(c.estado, c.dias)}
       <div class="info">
-        <div class="nombre">${c.cliente}${esV?`<span class="v-badge">${c.vendedor}</span>`:''}${esArchivado?'<span style="font-size:10px;padding:2px 7px;border-radius:99px;background:var(--surface);color:var(--text3);">Archivado</span>':''}</div>
-        <div class="sub">${c.paquete||'Sin paquete'}${precio?' · '+precio:''}${c.meses>1?' · <span style="color:var(--violet2);font-weight:700;">📆 '+c.meses+' meses</span>':''}</div>
+        <div class="nombre">${esc(c.cliente)}${esV?`<span class="v-badge">${esc(c.vendedor)}</span>`:''}${esArchivado?'<span style="font-size:10px;padding:2px 7px;border-radius:99px;background:var(--surface);color:var(--text3);">Archivado</span>':''}</div>
+        <div class="sub">${esc(c.paquete||'Sin paquete')}${precio?' · '+precio:''}${c.meses>1?' · <span style="color:var(--violet2);font-weight:700;">📆 '+c.meses+' meses</span>':''}</div>
       </div>
       <div class="derecha">
         ${esArchivado?'<span class="badge sin-fecha">Archivado</span>':badgeEstado(c.estado,c.dias)}
@@ -2130,7 +2136,11 @@ function cerrarColaWhatsApp(exito) {
 // Arma un CSV (con BOM para que Excel muestre bien los acentos) y lo descarga.
 function descargarCSV_(cols, filas, nombreBase) {
   const esc = v => {
-    const s = (v===undefined||v===null?'':String(v)).replace(/"/g,'""');
+    let s = (v===undefined||v===null?'':String(v));
+    // Previene inyección de fórmulas: un valor que empieza con =, +, -, @
+    // puede ejecutarse como fórmula en Excel. Prefijamos con comilla simple.
+    if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+    s = s.replace(/"/g,'""');
     return /[",\n;]/.test(s) ? '"'+s+'"' : s;
   };
   const csv = '﻿' + cols.map(esc).join(',') + '\n' + filas.map(f=>f.map(esc).join(',')).join('\n');
@@ -2226,17 +2236,17 @@ function verDetalle(id) {
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
       <div class="avatar" style="width:52px;height:52px;font-size:18px;background:${col.bg};color:${col.color};">${iniciales(c.cliente)}</div>
       <div style="flex:1;">
-        <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk';">${c.cliente}</div>
-        <div style="font-size:13px;color:var(--text2);">${c.id} · ${c.contacto||'Sin contacto'}</div>
+        <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk';">${esc(c.cliente)}</div>
+        <div style="font-size:13px;color:var(--text2);">${esc(c.id)} · ${esc(c.contacto||'Sin contacto')}</div>
         <div style="margin-top:4px;">${badgeEstado(c.estado,c.dias)}</div>
       </div>
       ${c.contacto ? `<div class="wa-btn" style="width:38px;height:38px;font-size:16px;" onclick="abrirWhatsApp('${c.id}',event)" title="${esClienteReciente(c)?'Enviar bienvenida':'WhatsApp'}">${esClienteReciente(c)?'🎉':'💬'}</div>` : ''}
     </div>
     <div class="detalle-grid">
-      <div><div class="detalle-label">Paquete</div><div class="detalle-value">${c.paquete||'—'}${c.meses>1?` <span style="font-size:11px;color:var(--violet2);font-weight:700;">📆 ${c.meses}m</span>`:''}</div></div>
-      <div><div class="detalle-label">Precio</div><div class="detalle-value">${c.precio?'$'+c.precio:'—'}</div></div>
-      <div><div class="detalle-label">Cuenta</div><div class="detalle-value" style="font-size:12px;">${c.cuenta||'—'}</div></div>
-      <div><div class="detalle-label">Vendedor</div><div class="detalle-value">${c.vendedor||'—'}</div></div>
+      <div><div class="detalle-label">Paquete</div><div class="detalle-value">${esc(c.paquete||'—')}${c.meses>1?` <span style="font-size:11px;color:var(--violet2);font-weight:700;">📆 ${c.meses}m</span>`:''}</div></div>
+      <div><div class="detalle-label">Precio</div><div class="detalle-value">${c.precio?'$'+esc(c.precio):'—'}</div></div>
+      <div><div class="detalle-label">Cuenta</div><div class="detalle-value" style="font-size:12px;">${esc(c.cuenta||'—')}</div></div>
+      <div><div class="detalle-label">Vendedor</div><div class="detalle-value">${esc(c.vendedor||'—')}</div></div>
       <div><div class="detalle-label">Inicio</div><div class="detalle-value">${c.inicio||'—'}</div></div>
       <div><div class="detalle-label">Renovación</div><div class="detalle-value">${c.renovacion||'—'}</div></div>
       <div><div class="detalle-label">Pago</div><div class="detalle-value" style="${(c.pago||'').toUpperCase()==='PENDIENTE'?'color:var(--red);font-weight:700;':''}">${c.pago||'—'}</div></div>
@@ -2247,7 +2257,7 @@ function verDetalle(id) {
       }
     </div>
     ${repartoHTML}
-    ${c.notas ? `<div style="background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📝 <strong>Nota:</strong> ${c.notas}</div>` : ''}`;
+    ${c.notas ? `<div style="background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📝 <strong>Nota:</strong> ${esc(c.notas)}</div>` : ''}`;
   const esArchivado = c.estado_raw==='ARCHIVADO';
   document.getElementById('d-contenido').innerHTML += esArchivado ? `
     <button onclick="reactivarCliente('${c.id}')" class="btn-secondary green" style="margin-top:4px;">✅ Reactivar cliente</button>` : `
@@ -2334,7 +2344,7 @@ function calcularRenovacion() {
   const sel=document.getElementById('n-paquete').value;
   const nombre=sel?sel.split('|')[0]:'';
   const meses=nombre?mesesCombo(nombre):1;
-  d.setDate(d.getDate()+30*meses);
+  d.setMonth(d.getMonth()+meses);
   document.getElementById('n-renovacion').value=formatoDDMMYYYY(d);
 }
 function actualizarPrecio() {
@@ -2552,6 +2562,7 @@ async function guardarCliente() {
   }
 
   const datos={
+    accion:'agregarCliente',
     id:'CL-'+(ultimoID+1),
     cliente,
     contacto:document.getElementById('n-contacto').value.trim(),
@@ -2563,6 +2574,7 @@ async function guardarCliente() {
     vendedor:document.getElementById('n-vendedor').value,
     pago:document.getElementById('n-pago').value,
     ganancia:miGanancia.toFixed(2),
+    gananciaAmigo:gananciaAmigo.toFixed(2),
     meses:mesesCombo(partes[0]),
     notas:document.getElementById('n-notas').value.trim(),
     opId:nuevoClienteOpId,
@@ -2769,7 +2781,7 @@ function renderCuentas() {
               <div class="cuenta-info-value">${c.cuentaPago||'—'}</div>
             </div>
           </div>
-          ${c.notas ? `<div style="background:var(--amber-bg);border-radius:10px;padding:9px 11px;font-size:12px;color:var(--amber);margin-bottom:12px;">📝 ${c.notas}</div>` : ''}
+          ${c.notas ? `<div style="background:var(--amber-bg);border-radius:10px;padding:9px 11px;font-size:12px;color:var(--amber);margin-bottom:12px;">📝 ${esc(c.notas)}</div>` : ''}
           <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Slots</div>
           ${c.slots.slice(0, c.slotsTotal).map((s, i) => {
             if (s === 'x' || s === 'X') return `<div class="slot-row"><div class="slot-num">Slot ${i+1}</div><div class="slot-cliente"><span class="slot-bloqueado-tag">No disponible</span></div></div>`;
@@ -2778,7 +2790,7 @@ function renderCuentas() {
             const nombreCliente = cliente ? cliente.cliente : s;
             return `<div class="slot-row">
               <div class="slot-num">Slot ${i+1}</div>
-              <div class="slot-cliente">${nombreCliente}<div style="font-size:11px;color:var(--text3);">${s}</div></div>
+              <div class="slot-cliente">${esc(nombreCliente)}<div style="font-size:11px;color:var(--text3);">${esc(s)}</div></div>
               ${MI_ROL==='admin' ? `<button class="slot-action" onclick="liberarSlot('${c.nombre}','${i}')">Liberar</button>` : ''}
             </div>`;
           }).join('')}
@@ -3058,12 +3070,13 @@ function renderGanancias() {
   let misGanancias=0, misClientes=0, misClientesDirectos=0;
   todosClientes.forEach(c=>{
     const activo = c.estado_raw !== 'ARCHIVADO' && c.estado !== 'vencido';
-    const g=parseFloat(c.ganancia)||0;
+    // montoBaseCliente_ devuelve TU neta si eres admin, o la comisión del
+    // vendedor si quien mira es vendedor — así el hero siempre muestra el
+    // número correcto sin exponer tu margen al vendedor.
+    const g = montoBaseCliente_(c);
     const v=c.vendedor.toLowerCase();
     if(v==='yo'){ if(activo){misGanancias+=g;misClientes++;misClientesDirectos++;} }
     else if(resumen[v]!==undefined){
-      // g aquí YA es tu ganancia_neta de esta venta (no la comisión del vendedor) —
-      // se calcula así desde que se guarda el cliente (ver guardarCliente/renovarCliente).
       if(activo){ resumen[v].clientes++; misGanancias+=g; misClientes++; }
     }
   });
@@ -3252,7 +3265,7 @@ function vendorCardHTML(v, r, hist) {
       ${hist.length ? hist.map(p => `
         <div class="slot-row">
           <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
-          <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||p.concepto||''}</div>
+          <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${esc(p.notas||p.concepto||'')}</div>
           <div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);font-size:13px;">$${parseFloat(p.monto||0).toFixed(2)}</div>
         </div>`).join('') : `<div style="font-size:11.5px;color:var(--text3);padding:6px 0;">Sin pagos registrados aún.</div>`}
     </div>
@@ -3264,7 +3277,7 @@ function vendorCardHTML(v, r, hist) {
       ${vu.map(p => { const t=parseFloat(p.monto||0); return `
         <div class="slot-row">
           <div class="slot-num" style="width:auto;color:var(--text2);">${p.fecha||'—'}</div>
-          <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${p.notas||'Venta única'} · total $${t.toFixed(2)}</div>
+          <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${esc(p.notas||'Venta única')} · total $${t.toFixed(2)}</div>
           <div style="font-family:'Space Grotesk';font-weight:700;color:var(--amber);font-size:13px;">$${(t/2).toFixed(2)}</div>
         </div>`; }).join('')}
     </div>` : ''}
@@ -3280,7 +3293,7 @@ function vendorCardHTML(v, r, hist) {
         ${ajustes.map(a => { const m=parseFloat(a.monto||0); return `
           <div class="slot-row">
             <div class="slot-num" style="width:auto;color:var(--text2);">${a.fecha||'—'}</div>
-            <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${a.nota||'Ajuste'}</div>
+            <div class="slot-cliente" style="font-size:12px;color:var(--text3);">${esc(a.nota||'Ajuste')}</div>
             <div style="font-family:'Space Grotesk';font-weight:700;color:${m>=0?'var(--green)':'var(--red)'};font-size:13px;">${m>=0?'+':'−'}$${Math.abs(m).toFixed(2)}</div>
           </div>`; }).join('')}
       </div>`;
@@ -3893,7 +3906,7 @@ function calcularRenovacionRenovar() {
   const paqueteParaGanancia = selVal ? selVal.split('|')[0] : c.paquete;
   // El vencimiento depende de la duración de ESE combo (30 días por mes).
   const meses = mesesCombo(paqueteParaGanancia);
-  const d = fechaInputLocal(inicio); if(!d) return; d.setDate(d.getDate()+30*meses);
+  const d = fechaInputLocal(inicio); if(!d) return; d.setMonth(d.getMonth()+meses);
   document.getElementById('renovar-fecha-renovacion').value = formatoDDMMYYYY(d);
 
   const gananciaNueva = calcularGananciaParaCliente_(paqueteParaGanancia, c.vendedor);
@@ -3934,6 +3947,8 @@ function guardarRenovacion() {
 
   // accion 'renovarCliente': el backend extiende fechas Y anota el abono de
   // comisión en el libro. (Editar normal NO toca el libro, a propósito.)
+  const datosPaqCiclo = PAQUETES_GANANCIA[paqueteCiclo];
+  const gananciaAmigoRenovar = datosPaqCiclo ? (datosPaqCiclo.gananciaAmigo||0) : 0;
   const datos = {
     accion: 'renovarCliente', key: APP_KEY,
     id: c.id,
@@ -3941,6 +3956,7 @@ function guardarRenovacion() {
     renovacion: document.getElementById('renovar-fecha-renovacion').value,
     pago: document.getElementById('renovar-pago').value,
     ganancia: gananciaNueva.toFixed(2),
+    gananciaAmigo: gananciaAmigoRenovar.toFixed(2),
     paquete: paqueteNuevo,   // vacío = mantener el mismo
     precio: precioNuevo,
     meses: mesesCombo(paqueteCiclo),
@@ -4022,7 +4038,7 @@ function calcularRenovacionEditar() {
   const sel = document.getElementById('e-paquete').value;
   const nombre = sel ? sel.split('|')[0] : '';
   const meses = nombre ? mesesCombo(nombre) : 1;
-  const d = fechaInputLocal(inicio); if(!d) return; d.setDate(d.getDate() + 30*meses);
+  const d = fechaInputLocal(inicio); if(!d) return; d.setMonth(d.getMonth() + meses);
   document.getElementById('e-renovacion').value = formatoDDMMYYYY(d);
 }
 
