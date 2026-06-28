@@ -91,6 +91,10 @@ body {
   -webkit-backdrop-filter: blur(12px) saturate(160%);
   border-bottom: 1px solid var(--border);
   padding: 14px 20px;
+  /* En iPhone con isla dinámica/notch baja el contenido para que no choque. */
+  padding-top: calc(14px + env(safe-area-inset-top, 0px));
+  padding-left: calc(20px + env(safe-area-inset-left, 0px));
+  padding-right: calc(20px + env(safe-area-inset-right, 0px));
   display: flex; align-items: center; justify-content: space-between;
   position: sticky; top: 0; z-index: 100;
 }
@@ -147,7 +151,7 @@ body {
 .nav-tabs {
   display: flex; gap: 4px; background: rgba(20,20,31,0.5); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border); padding: 6px 16px; overflow-x: auto;
-  position: sticky; top: 61px; z-index: 99;
+  position: sticky; top: calc(61px + env(safe-area-inset-top, 0px)); z-index: 99;
 }
 .nav-tab {
   padding: 9px 14px; font-size: 13px; font-weight: 500; color: var(--text3); cursor: pointer;
@@ -242,7 +246,7 @@ body {
 
 /* Barra flotante con el conteo y el botón de envío */
 #barra-seleccion {
-  position: fixed; left: 50%; transform: translateX(-50%); bottom: 20px; z-index: 400;
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 400;
   display: flex; align-items: center; gap: 16px; padding: 12px 16px;
   background: var(--surface-solid); border: 1px solid var(--border-strong); border-radius: 14px;
   box-shadow: 0 14px 40px -8px rgba(0,0,0,0.7); font-size: 14px; font-weight: 600; color: var(--text);
@@ -401,7 +405,7 @@ body {
 
 /* ===== FAB ===== */
 .fab {
-  position: fixed; bottom: 24px; right: 24px; width: 58px; height: 58px; border-radius: 50%;
+  position: fixed; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); right: 24px; width: 58px; height: 58px; border-radius: 50%;
   background: linear-gradient(135deg, var(--violet), var(--violet2)); color: #fff; border: none;
   font-size: 26px; cursor: pointer; box-shadow: 0 10px 30px -6px rgba(139,92,246,0.6);
   display: flex; align-items: center; justify-content: center; z-index: 150;
@@ -612,7 +616,7 @@ body {
   .content { padding: 0 14px 110px; }
   .form-row { grid-template-columns: 1fr; }
   .detalle-grid { grid-template-columns: 1fr; }
-  .nav-tabs { top: 57px; }
+  .nav-tabs { top: calc(57px + env(safe-area-inset-top, 0px)); }
 }
 
 /* ===== Login ===== */
@@ -1289,6 +1293,13 @@ const PAQUETES_GANANCIA_DEFAULT = {
 };
 let PAQUETES_GANANCIA = JSON.parse(JSON.stringify(PAQUETES_GANANCIA_DEFAULT));
 
+// Duración en meses de un combo (1 = mensual). Los combos viejos sin el dato
+// se asumen mensuales.
+function mesesCombo(nombre) {
+  const c = PAQUETES_GANANCIA[nombre];
+  return c && c.meses ? Math.max(1, parseInt(c.meses)||1) : 1;
+}
+
 function iniciales(n) {
   if (!n) return '?';
   const p = n.trim().split(' ');
@@ -1665,6 +1676,7 @@ function cargarDatos() {
           // dispositivo que descuadraban el conteo y la vista de ganancias.
           estado_raw: (f['estado'] || 'ACTIVO').toUpperCase(),
           notas:f['notas']||'',
+          meses: Math.max(1, parseInt(f['meses'])||1),
         };
       });
       actualizarMetricas(); actualizarAlerta(); filtrar();
@@ -2039,7 +2051,7 @@ function filtrar() {
       ${esArchivado ? `<div class="avatar" style="background:var(--surface);color:var(--text3);">${iniciales(c.cliente)}</div>` : anilloHTML(c.estado, c.dias)}
       <div class="info">
         <div class="nombre">${c.cliente}${esV?`<span class="v-badge">${c.vendedor}</span>`:''}${esArchivado?'<span style="font-size:10px;padding:2px 7px;border-radius:99px;background:var(--surface);color:var(--text3);">Archivado</span>':''}</div>
-        <div class="sub">${c.paquete||'Sin paquete'}${precio?' · '+precio:''}</div>
+        <div class="sub">${c.paquete||'Sin paquete'}${precio?' · '+precio:''}${c.meses>1?' · <span style="color:var(--violet2);font-weight:700;">📆 '+c.meses+' meses</span>':''}</div>
       </div>
       <div class="derecha">
         ${esArchivado?'<span class="badge sin-fecha">Archivado</span>':badgeEstado(c.estado,c.dias)}
@@ -2186,6 +2198,29 @@ function verDetalle(id) {
   const paqData = PAQUETES_GANANCIA[c.paquete];
   const pctVendedor = COMISIONES[c.vendedor.toLowerCase()] !== undefined ? COMISIONES[c.vendedor.toLowerCase()] : 100;
   const comisionVend = esVendedor && paqData ? paqData.gananciaAmigo * (pctVendedor/100) : 0;
+  // Desglose visible solo en ventas de varios meses (donde el reparto confunde):
+  // deja claro qué es pago ÚNICO (la comisión del vendedor) y qué se REPARTE por
+  // mes. Funciona con cualquier combo de N meses, usando sus propias cantidades.
+  const mesesDet = Math.max(1, parseInt(c.meses)||1);
+  const ganMesDet = mesesDet>0 ? ganancia/mesesDet : ganancia;
+  let repartoHTML = '';
+  if (mesesDet > 1) {
+    const rowStyle = 'display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;';
+    const rowLast = 'display:flex;justify-content:space-between;font-size:13px;padding-top:6px;border-top:1px dashed var(--border);';
+    const boxOpen = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px;"><div style="font-size:12px;font-weight:700;color:var(--violet2);margin-bottom:8px;">📆 Reparto de esta venta · '+mesesDet+' meses</div>';
+    if (MI_ROL === 'admin') {
+      repartoHTML = boxOpen +
+        (esVendedor ? '<div style="'+rowStyle+'"><span style="color:var(--text2);">Comisión '+c.vendedor+'</span><span style="color:var(--amber);font-weight:600;">$'+comisionVend.toFixed(2)+' · pago único ✓</span></div>' : '') +
+        '<div style="'+rowStyle+'"><span style="color:var(--text2);">Tu parte neta total</span><span style="color:var(--text);font-weight:600;">$'+ganancia.toFixed(2)+'</span></div>' +
+        '<div style="'+rowLast+'"><span style="color:var(--text2);">Se suma a tu mes</span><span style="color:var(--green);font-weight:700;">$'+ganMesDet.toFixed(2)+'/mes × '+mesesDet+'</span></div>' +
+        '</div>';
+    } else {
+      repartoHTML = boxOpen +
+        '<div style="'+rowStyle+'"><span style="color:var(--text2);">Tu comisión</span><span style="color:var(--amber);font-weight:600;">$'+comisionVend.toFixed(2)+' · pago único ✓</span></div>' +
+        '<div style="'+rowLast+'"><span style="color:var(--text2);">En tu resumen mensual</span><span style="color:var(--green);font-weight:700;">$'+(comisionVend/mesesDet).toFixed(2)+'/mes × '+mesesDet+'</span></div>' +
+        '</div>';
+    }
+  }
   document.getElementById('d-titulo').textContent=c.cliente;
   document.getElementById('d-contenido').innerHTML=`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
@@ -2198,7 +2233,7 @@ function verDetalle(id) {
       ${c.contacto ? `<div class="wa-btn" style="width:38px;height:38px;font-size:16px;" onclick="abrirWhatsApp('${c.id}',event)" title="${esClienteReciente(c)?'Enviar bienvenida':'WhatsApp'}">${esClienteReciente(c)?'🎉':'💬'}</div>` : ''}
     </div>
     <div class="detalle-grid">
-      <div><div class="detalle-label">Paquete</div><div class="detalle-value">${c.paquete||'—'}</div></div>
+      <div><div class="detalle-label">Paquete</div><div class="detalle-value">${c.paquete||'—'}${c.meses>1?` <span style="font-size:11px;color:var(--violet2);font-weight:700;">📆 ${c.meses}m</span>`:''}</div></div>
       <div><div class="detalle-label">Precio</div><div class="detalle-value">${c.precio?'$'+c.precio:'—'}</div></div>
       <div><div class="detalle-label">Cuenta</div><div class="detalle-value" style="font-size:12px;">${c.cuenta||'—'}</div></div>
       <div><div class="detalle-label">Vendedor</div><div class="detalle-value">${c.vendedor||'—'}</div></div>
@@ -2211,6 +2246,7 @@ function verDetalle(id) {
         : `<div><div class="detalle-label">Tu comisión</div><div class="detalle-value" style="color:var(--green);font-weight:700;">${comisionVend>0?'$'+comisionVend.toFixed(2):'—'}</div></div>`
       }
     </div>
+    ${repartoHTML}
     ${c.notas ? `<div style="background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📝 <strong>Nota:</strong> ${c.notas}</div>` : ''}`;
   const esArchivado = c.estado_raw==='ARCHIVADO';
   document.getElementById('d-contenido').innerHTML += esArchivado ? `
@@ -2255,7 +2291,7 @@ function poblarSelectsPaquetes() {
     // si el cliente cambió de combo.
     sel.innerHTML = '<option value="">Selecciona...</option>' + Object.entries(PAQUETES_GANANCIA).map(([nombre,d])=>{
       const valor = `${nombre}|${d.precio}|${d.gananciaAmigo}|${d.gananciaNeta}`;
-      return `<option value="${valor}">${nombre} — $${d.precio}</option>`;
+      return `<option value="${valor}">${nombre} — $${d.precio}${d.meses>1?' · '+d.meses+' meses':''}</option>`;
     }).join('');
     if (valorActual) sel.value = valorActual;
   });
@@ -2292,7 +2328,13 @@ function generarID() {
 }
 function calcularRenovacion() {
   const inicio=document.getElementById('n-inicio').value; if(!inicio) return;
-  const d=fechaInputLocal(inicio); if(!d) return; d.setDate(d.getDate()+30);
+  const d=fechaInputLocal(inicio); if(!d) return;
+  // El vencimiento depende de la duración del combo: 1 mes = +30 días,
+  // 3 meses = +90, etc. Así una venta de varios meses no vence al mes.
+  const sel=document.getElementById('n-paquete').value;
+  const nombre=sel?sel.split('|')[0]:'';
+  const meses=nombre?mesesCombo(nombre):1;
+  d.setDate(d.getDate()+30*meses);
   document.getElementById('n-renovacion').value=formatoDDMMYYYY(d);
 }
 function actualizarPrecio() {
@@ -2306,6 +2348,7 @@ function actualizarPrecio() {
   const p=sel.split('|');
   document.getElementById('n-precio').value='$'+p[1];
   calcularGanancia();
+  calcularRenovacion();   // recalcula vencimiento según la duración del combo
   cargarCuentasDisponibles(p[0]);
 }
 
@@ -2409,8 +2452,11 @@ function renderCatalogo() {
     const miGanancia = esAdmin ? d.gananciaNeta : (d.gananciaAmigo * (miPct/100));
     return `<div class="cuenta-card" style="padding:14px 16px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">
-        <div style="font-size:13.5px;font-weight:700;flex:1;">${nombre}</div>
-        <div style="font-family:'Space Grotesk';font-size:16px;font-weight:700;color:var(--text);white-space:nowrap;">$${d.precio}</div>
+        <div style="font-size:13.5px;font-weight:700;flex:1;">${nombre}${(d.meses||1)>1?` <span style="font-size:11px;color:var(--violet2);">📆 ${d.meses} meses</span>`:''}</div>
+        <div style="text-align:right;white-space:nowrap;">
+          <div style="font-family:'Space Grotesk';font-size:16px;font-weight:700;color:var(--text);">$${d.precio}</div>
+          ${(d.meses||1)>1?`<div style="font-size:10.5px;color:var(--text3);">≈ $${(d.precio/d.meses).toFixed(0)}/mes</div>`:''}
+        </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         <div class="cuenta-info-item">
@@ -2517,6 +2563,7 @@ async function guardarCliente() {
     vendedor:document.getElementById('n-vendedor').value,
     pago:document.getElementById('n-pago').value,
     ganancia:miGanancia.toFixed(2),
+    meses:mesesCombo(partes[0]),
     notas:document.getElementById('n-notas').value.trim(),
     opId:nuevoClienteOpId,
     key:APP_KEY
@@ -2976,6 +3023,28 @@ function abrirModalNuevaCuenta() {
   }, 50);
 }
 
+// "Cuánto vale" toda la venta para quien mira: ganancia neta (admin) o comisión
+// del vendedor. Es el monto que luego se reparte entre los meses del ciclo.
+function montoBaseCliente_(c) {
+  if (MI_ROL === 'admin') return parseFloat(c.ganancia) || 0;
+  const pd = PAQUETES_GANANCIA[c.paquete];
+  if (!pd) return 0;
+  const pct = COMISIONES[MI_VENDEDOR] !== undefined ? COMISIONES[MI_VENDEDOR] : 100;
+  return (pd.gananciaAmigo || 0) * (pct/100);
+}
+
+// Porción de la ganancia de este cliente que corresponde al mes (anio,mes).
+// Una venta de N meses reparte su monto en N partes iguales, una por cada mes
+// del ciclo a partir de su inicio. Las mensuales (N=1) caen todas en su mes.
+function porcionMesCliente_(c, anio, mes) {
+  const f = parseFecha(c.inicio); if (!f) return 0;
+  const meses = Math.max(1, parseInt(c.meses) || 1);
+  const inicioIdx = f.getFullYear()*12 + f.getMonth();
+  const objetivo = anio*12 + mes;
+  if (objetivo >= inicioIdx && objetivo < inicioIdx + meses) return montoBaseCliente_(c) / meses;
+  return 0;
+}
+
 function renderGanancias() {
   const vendedores = MI_ROL==='admin' ? ['ximenita','saito'] : [MI_VENDEDOR];
   const resumen = {};
@@ -3043,9 +3112,10 @@ function renderGanancias() {
   const heroSub = todoAlCorriente ? 'Al corriente — nada pendiente ✓' : `${Math.round(pctPagado)}% de lo generado ya está pagado`;
 
   // ===== Resumen del mes en curso =====
-  // "Altas y renovaciones": clientes cuyo INICIO de ciclo cae en este mes (un
-  // alta nueva y una renovación ambas ponen inicio = hoy). Dinero: ganancia
-  // tuya (admin) o comisión (vendedor) generada por esos clientes este mes.
+  // "Altas y renovaciones": clientes cuyo INICIO de ciclo cae en este mes (alta
+  // o renovación). El DINERO se reparte: una venta de varios meses divide su
+  // ganancia entre sus meses, así julio/agosto reciben su parte de una venta
+  // hecha en junio, en vez de inflar solo junio.
   const _now = new Date();
   const _mA = _now.getMonth(), _aA = _now.getFullYear();
   const _mP = _mA===0?11:_mA-1, _aP = _mA===0?_aA-1:_aA;
@@ -3053,19 +3123,18 @@ function renderGanancias() {
   todosClientes.forEach(c=>{
     if(c.estado_raw==='ARCHIVADO') return;
     const f = parseFecha(c.inicio); if(!f) return;
-    if(f.getMonth()===_mA && f.getFullYear()===_aA){
-      nuevosMes++;
-      if(MI_ROL==='admin'){ generadoMes += parseFloat(c.ganancia)||0; }
-      else {
-        const pd = PAQUETES_GANANCIA[c.paquete];
-        const pct = COMISIONES[MI_VENDEDOR]!==undefined?COMISIONES[MI_VENDEDOR]:100;
-        generadoMes += pd ? pd.gananciaAmigo*(pct/100) : 0;
-      }
-    } else if(f.getMonth()===_mP && f.getFullYear()===_aP){ nuevosPrev++; }
+    if(f.getMonth()===_mA && f.getFullYear()===_aA) nuevosMes++;
+    else if(f.getMonth()===_mP && f.getFullYear()===_aP) nuevosPrev++;
+    generadoMes += porcionMesCliente_(c, _aA, _mA);   // parte que toca a este mes
   });
   const difMes = nuevosMes - nuevosPrev;
   const _nombresMes = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
   const dineroLbl = MI_ROL==='admin' ? 'tu ganancia generada' : 'tu comisión generada';
+  // Nota aclaratoria: el número es NETO (ya sin comisión de vendedores) y, en
+  // ventas de varios meses, solo cuenta la parte que toca a este mes.
+  const dineroNota = MI_ROL==='admin'
+    ? 'ya sin comisiones de vendedores · ventas de varios meses repartidas'
+    : 'tu parte de ventas de varios meses se reparte por mes';
   const resumenMesHTML = `
     <div class="resumen-mes">
       <div class="rm-title">📅 ${_nombresMes[_mA]} en curso</div>
@@ -3077,6 +3146,7 @@ function renderGanancias() {
         <div>
           <div class="rm-num" style="color:var(--green);">$${generadoMes.toLocaleString('es-MX',{maximumFractionDigits:0})}</div>
           <div class="rm-lbl">${dineroLbl} este mes</div>
+          <div class="rm-lbl" style="font-size:10px;color:var(--text3);margin-top:2px;opacity:.85;">${dineroNota}</div>
         </div>
       </div>
     </div>`;
@@ -3395,7 +3465,7 @@ function renderConfig() {
       <div style="display:flex;flex-direction:column;gap:8px;" id="lista-paquetes">
         ${paquetes.map(([nombre, datos], i) => `
           <div class="cuenta-card" style="padding:13px 15px;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:9px;">${nombre}</div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:9px;">${nombre}${(datos.meses||1)>1?` <span style="font-size:11px;color:var(--violet2);font-weight:700;">📆 ${datos.meses} meses</span>`:''}</div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
               <div>
                 <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Precio público</div>
@@ -3415,6 +3485,13 @@ function renderConfig() {
                   id="paq-neta-${i}" value="${datos.gananciaNeta}"
                   onchange="actualizarPaquete(${i},'${nombre.replace(/'/g,"")}')">
               </div>
+            </div>
+            <div style="margin-top:9px;display:flex;align-items:center;gap:8px;">
+              <div style="font-size:10px;color:var(--text3);text-transform:uppercase;">Duración</div>
+              <select class="form-select" style="padding:6px 9px;font-size:13px;width:auto;flex:1;max-width:160px;"
+                id="paq-meses-${i}" onchange="actualizarPaquete(${i},'${nombre.replace(/'/g,"")}')">
+                ${[1,2,3,6,12].map(m=>`<option value="${m}"${(datos.meses||1)==m?' selected':''}>${m} ${m===1?'mes':'meses'}</option>`).join('')}
+              </select>
             </div>
           </div>`).join('')}
       </div>
@@ -3479,8 +3556,14 @@ function renderConfig() {
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Cuenta de pago</label>
-          <input class="form-input" id="nc-pago" placeholder="Ej. cmichis@gmail.com (Google Play)">
+          <label class="form-label">Cuenta de pago — ¿por dónde se paga?</label>
+          <select class="form-select" id="nc-pago-tipo" onchange="actualizarPagoDetalle()">
+            <option value="App Store">🍎 App Store</option>
+            <option value="Google Play">▶️ Google Play</option>
+            <option value="Otro">🌐 Otro servicio</option>
+            <option value="No aplica">— No aplica</option>
+          </select>
+          <input class="form-input" id="nc-pago" placeholder="Correo de la cuenta (opcional)" style="margin-top:8px;">
         </div>
         <button class="btn-primary" onclick="guardarNuevaCuenta()">Guardar cuenta</button>
         <div id="nc-status"></div>
@@ -3519,6 +3602,17 @@ function renderConfig() {
           <label class="form-label">Tu ganancia neta</label>
           <input class="form-input" type="number" id="ncb-neta" placeholder="20">
         </div>
+        <div class="form-group">
+          <label class="form-label">Duración</label>
+          <select class="form-select" id="ncb-meses">
+            <option value="1">1 mes (mensual)</option>
+            <option value="2">2 meses</option>
+            <option value="3">3 meses</option>
+            <option value="6">6 meses</option>
+            <option value="12">12 meses</option>
+          </select>
+          <div style="font-size:11px;color:var(--text3);margin-top:5px;">Si es de varios meses, el vencimiento (ej. 90 días) y el reparto de ganancia por mes se ajustan solos. El precio/ganancia que pongas arriba son los del paquete completo.</div>
+        </div>
         <button class="btn-primary" onclick="guardarNuevoCombo()">Guardar combo</button>
         <div id="ncb-status"></div>
       </div>
@@ -3552,11 +3646,14 @@ function actualizarPaquete(idx, nombre) {
   const precio = parseFloat(document.getElementById('paq-precio-'+idx).value)||0;
   const amigo = parseFloat(document.getElementById('paq-amigo-'+idx).value)||0;
   const neta = parseFloat(document.getElementById('paq-neta-'+idx).value)||0;
+  const selMeses = document.getElementById('paq-meses-'+idx);
+  const meses = selMeses ? Math.max(1, parseInt(selMeses.value)||1) : (PAQUETES_GANANCIA[nombre]?PAQUETES_GANANCIA[nombre].meses||1:1);
   if (precio < 0 || amigo < 0 || neta < 0) { toast('Los montos no pueden ser negativos', 'error'); return; }
   if (PAQUETES_GANANCIA[nombre]) {
     PAQUETES_GANANCIA[nombre].precio = precio;
     PAQUETES_GANANCIA[nombre].gananciaAmigo = amigo;
     PAQUETES_GANANCIA[nombre].gananciaNeta = neta;
+    PAQUETES_GANANCIA[nombre].meses = meses;
     guardarConfigLocal();
     // CLAVE (dinero): persistir en la hoja 'combos' del servidor. La comisión que
     // se ABONA en el libro y el corte mensual leen ganancia_amigo de esa hoja
@@ -3565,7 +3662,7 @@ function actualizarPaquete(idx, nombre) {
     // lo realmente pagado. Mandamos plataformas solo si el combo ya las tiene
     // (el backend no las borra si no se envían).
     const plats = Array.isArray(PAQUETES_GANANCIA[nombre].plataformas) ? PAQUETES_GANANCIA[nombre].plataformas.join(',') : '';
-    postDatos({accion:'agregarCombo',key:APP_KEY,nombre,precio,gananciaAmigo:amigo,gananciaNeta:neta,plataformas:plats})
+    postDatos({accion:'agregarCombo',key:APP_KEY,nombre,precio,gananciaAmigo:amigo,gananciaNeta:neta,meses,plataformas:plats})
       .then(()=>toast('Combo actualizado'))
       .catch(()=>toast('Se guardó local, pero no se pudo sincronizar con Sheets', 'error'));
   }
@@ -3640,8 +3737,9 @@ function sincronizarCombosServidor() {
         const neta = parseFloat(f['ganancia_neta']);
         const plataformasStr = (f['plataformas']||'').trim();
         const plataformas = plataformasStr ? plataformasStr.split(',').map(p=>p.trim()).filter(Boolean) : undefined;
+        const meses = Math.max(1, parseInt(f['meses'])||1);
         if (nombre && !isNaN(precio)) {
-          PAQUETES_GANANCIA[nombre] = { precio, gananciaAmigo: isNaN(amigo)?0:amigo, gananciaNeta: isNaN(neta)?0:neta };
+          PAQUETES_GANANCIA[nombre] = { precio, gananciaAmigo: isNaN(amigo)?0:amigo, gananciaNeta: isNaN(neta)?0:neta, meses };
           if (plataformas && plataformas.length) PAQUETES_GANANCIA[nombre].plataformas = plataformas;
         }
       });
@@ -3660,6 +3758,7 @@ function guardarNuevoCombo() {
   const precio = parseFloat(document.getElementById('ncb-precio').value)||0;
   const amigo = parseFloat(document.getElementById('ncb-amigo').value)||0;
   const neta = parseFloat(document.getElementById('ncb-neta').value)||0;
+  const meses = Math.max(1, parseInt(document.getElementById('ncb-meses').value)||1);
   const plataformasSeleccionadas = Array.from(document.querySelectorAll('.ncb-plat-check:checked')).map(c=>c.value);
   const status = document.getElementById('ncb-status');
 
@@ -3680,10 +3779,10 @@ function guardarNuevoCombo() {
     return;
   }
 
-  PAQUETES_GANANCIA[nombre] = {precio, gananciaAmigo:amigo, gananciaNeta:neta, plataformas:plataformasSeleccionadas};
+  PAQUETES_GANANCIA[nombre] = {precio, gananciaAmigo:amigo, gananciaNeta:neta, meses, plataformas:plataformasSeleccionadas};
   guardarConfigLocal();
 
-  postDatos({accion:'agregarCombo', key:APP_KEY, nombre, precio, gananciaAmigo:amigo, gananciaNeta:neta, plataformas:plataformasSeleccionadas.join(',')})
+  postDatos({accion:'agregarCombo', key:APP_KEY, nombre, precio, gananciaAmigo:amigo, gananciaNeta:neta, meses, plataformas:plataformasSeleccionadas.join(',')})
     .then(res=>{
       status.innerHTML = '<div class="success-box"><p>✅ Combo guardado y disponible para usar</p></div>';
       toast('Combo "'+nombre+'" agregado');
@@ -3691,12 +3790,34 @@ function guardarNuevoCombo() {
       document.getElementById('ncb-precio').value='';
       document.getElementById('ncb-amigo').value='';
       document.getElementById('ncb-neta').value='';
+      document.getElementById('ncb-meses').value='1';
       document.querySelectorAll('.ncb-plat-check').forEach(c=>c.checked=false);
     })
     .catch(()=>{
       // Aunque falle el guardado remoto, ya quedó disponible localmente para esta sesión
       status.innerHTML = '<div class="success-box"><p>✅ Combo disponible en esta sesión (no se pudo sincronizar con Sheets)</p></div>';
     });
+}
+
+// Ajusta el campo "detalle" según el método de pago elegido. En "No aplica" se
+// oculta; en "Otro" pide el nombre del servicio; en App Store/Google Play pide
+// (opcional) el correo de la cuenta.
+function actualizarPagoDetalle() {
+  const tipo = document.getElementById('nc-pago-tipo').value;
+  const det = document.getElementById('nc-pago');
+  if (!det) return;
+  if (tipo === 'No aplica') { det.style.display = 'none'; det.value = ''; return; }
+  det.style.display = '';
+  det.placeholder = tipo === 'Otro' ? '¿Qué servicio? (ej. pago directo, web…)' : 'Correo de la cuenta (opcional)';
+}
+
+// Combina método + detalle en el texto que se guarda como cuenta_pago.
+// Ej: "Google Play · cmichis@gmail.com", "Otro · pago directo", "No aplica".
+function construirCuentaPago_() {
+  const tipo = (document.getElementById('nc-pago-tipo')||{}).value || '';
+  if (tipo === 'No aplica' || !tipo) return tipo || '';
+  const det = document.getElementById('nc-pago').value.trim();
+  return det ? tipo + ' · ' + det : tipo;
 }
 
 function guardarNuevaCuenta() {
@@ -3707,7 +3828,7 @@ function guardarNuevaCuenta() {
   // El sistema solo modela 5 slots (slot1..slot5). Acotamos aquí para no crear
   // cuentas con un slot6 "fantasma" que nunca se ocuparía ni liberaría.
   const slots = String(Math.max(1, Math.min(5, parseInt(document.getElementById('nc-slots').value)||4)));
-  const pago = document.getElementById('nc-pago').value.trim();
+  const pago = construirCuentaPago_();
   const status = document.getElementById('nc-status');
 
   if (!nombre || !correo) {
@@ -3730,6 +3851,8 @@ function guardarNuevaCuenta() {
         document.getElementById('nc-correo').value='';
         document.getElementById('nc-pass').value='';
         document.getElementById('nc-pago').value='';
+        document.getElementById('nc-pago-tipo').value='App Store';
+        actualizarPagoDetalle();
         cargarCuentasBackground();
       } else throw new Error(res.message);
     })
@@ -3755,7 +3878,7 @@ function abrirRenovar(id) {
   const selPaq = document.getElementById('renovar-nuevo-paquete');
   selPaq.innerHTML = '<option value="">Mantener el mismo combo</option>' +
     Object.entries(PAQUETES_GANANCIA).map(([nombre,d])=>
-      `<option value="${nombre}|${d.precio}">${nombre} — $${d.precio}</option>`).join('');
+      `<option value="${nombre}|${d.precio}">${nombre} — $${d.precio}${d.meses>1?' · '+d.meses+' meses':''}</option>`).join('');
   selPaq.value = '';
   document.getElementById('renovar-pago').value = 'PAGADO';
   document.getElementById('renovar-status').innerHTML = '';
@@ -3771,15 +3894,17 @@ function abrirRenovar(id) {
 function calcularRenovacionRenovar() {
   const inicio = document.getElementById('renovar-inicio').value;
   if (!inicio) return;
-  const d = fechaInputLocal(inicio); if(!d) return; d.setDate(d.getDate()+30);
-  document.getElementById('renovar-fecha-renovacion').value = formatoDDMMYYYY(d);
-
   const id = document.getElementById('renovar-id').value;
   const c = todosClientes.find(x => x.id === id);
   if (!c) return;
-  // Si eligió un combo nuevo (upgrade), la comisión se calcula con ese.
+  // Combo del nuevo ciclo: el elegido (upgrade) o el mismo de antes.
   const selVal = document.getElementById('renovar-nuevo-paquete').value;
   const paqueteParaGanancia = selVal ? selVal.split('|')[0] : c.paquete;
+  // El vencimiento depende de la duración de ESE combo (30 días por mes).
+  const meses = mesesCombo(paqueteParaGanancia);
+  const d = fechaInputLocal(inicio); if(!d) return; d.setDate(d.getDate()+30*meses);
+  document.getElementById('renovar-fecha-renovacion').value = formatoDDMMYYYY(d);
+
   const gananciaNueva = calcularGananciaParaCliente_(paqueteParaGanancia, c.vendedor);
   document.getElementById('renovar-ganancia-nueva').textContent = '$'+gananciaNueva.toFixed(2);
 }
@@ -3827,6 +3952,7 @@ function guardarRenovacion() {
     ganancia: gananciaNueva.toFixed(2),
     paquete: paqueteNuevo,   // vacío = mantener el mismo
     precio: precioNuevo,
+    meses: mesesCombo(paqueteCiclo),
     opId: renovarOpId,
   };
 
@@ -3902,7 +4028,10 @@ function actualizarPrecioEditar() {
 function calcularRenovacionEditar() {
   const inicio = document.getElementById('e-inicio').value;
   if (!inicio) return;
-  const d = fechaInputLocal(inicio); if(!d) return; d.setDate(d.getDate() + 30);
+  const sel = document.getElementById('e-paquete').value;
+  const nombre = sel ? sel.split('|')[0] : '';
+  const meses = nombre ? mesesCombo(nombre) : 1;
+  const d = fechaInputLocal(inicio); if(!d) return; d.setDate(d.getDate() + 30*meses);
   document.getElementById('e-renovacion').value = formatoDDMMYYYY(d);
 }
 
@@ -3958,6 +4087,9 @@ async function guardarEdicion() {
   };
   if (gananciaRecalculada !== null) {
     datos.ganancia = gananciaRecalculada.toFixed(2);
+  }
+  if (sel) {
+    datos.meses = mesesCombo(sel.split('|')[0]);   // actualiza la duración si cambió de combo
   }
   const btn = document.getElementById('btn-editar');
   btn.disabled = true; btn.textContent = 'Guardando...';
