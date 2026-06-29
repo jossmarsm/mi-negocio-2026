@@ -2385,7 +2385,10 @@ function cargarCuentasDisponibles(paquete, targetId, selectClass, cuentasActuale
   let html = '';
   plataformas.forEach(plat => {
     const cuentasPlat = todasCuentas.filter(c => c.plataforma === plat).map(cuenta => {
-      const yaAsignadaAqui = cuentasActuales.includes(cuenta.correo);
+      // "Ya asignada a este cliente" si su NOMBRE (lo nuevo) o su correo (lo viejo)
+      // está entre las cuentas actuales del cliente — así se preselecciona bien
+      // tanto para clientes nuevos como para los que se guardaron por correo.
+      const yaAsignadaAqui = cuentasActuales.includes(cuenta.nombre) || cuentasActuales.includes(cuenta.correo);
       let libres = cuenta.slots.slice(0, cuenta.slotsTotal).filter(s => !s || s.trim() === '').length;
       // Si este cliente ya ocupa un slot en esta cuenta, ese slot cuenta como
       // "disponible para él" aunque la cuenta esté llena para los demás.
@@ -2399,10 +2402,12 @@ function cargarCuentasDisponibles(paquete, targetId, selectClass, cuentasActuale
     if (!cuentasPlat.length) {
       html += `<div style="font-size:12px;color:var(--red);padding:9px;background:var(--red-bg);border-radius:10px;">⚠️ Sin slots disponibles en ${plat}</div>`;
     } else {
-      const correoPreseleccionado = cuentasActuales.find(correo => cuentasPlat.some(c => c.correo === correo)) || '';
+      // El valor que se guarda es el NOMBRE de la cuenta (único), no el correo —
+      // así dos cuentas con el mismo correo (Disney/HBO) nunca se confunden.
+      const refPresel = cuentasActuales.find(ref => cuentasPlat.some(c => c.nombre === ref || c.correo === ref)) || '';
       html += `<select class="form-select ${selectClass}" data-plat="${plat}">
         <option value="">Selecciona cuenta de ${plat}...</option>
-        ${cuentasPlat.map(c => `<option value="${c.correo}" ${c.correo===correoPreseleccionado?'selected':''}>${c.nombre} — ${c.correo} (${c.libres} libre${c.libres!==1?'s':''})${c.yaAsignadaAqui?' · ya asignada':''}</option>`).join('')}
+        ${cuentasPlat.map(c => `<option value="${esc(c.nombre)}" ${(c.nombre===refPresel||c.correo===refPresel)?'selected':''}>${esc(c.nombre)} — ${esc(c.correo)} (${c.libres} libre${c.libres!==1?'s':''})${c.yaAsignadaAqui?' · ya asignada':''}</option>`).join('')}
       </select>`;
     }
     html += `</div>`;
@@ -2750,6 +2755,7 @@ function renderCuentas() {
         return '<div class="slot-mini ocupado" title="Ocupado"></div>';
       }).join('');
       const cardId = `cuenta-${plat}-${idx}`.replace(/\s/g,'_');
+      const nombreSeguroCuenta = (c.nombre||'').replace(/'/g,"\\'");
       const claseLlena = libres<=0 ? ' card-llena' : (libres===1 ? ' card-casi' : '');
       const estadoLibres = libres<=0
         ? '<div class="cuenta-badge llena">LLENA</div>'
@@ -2760,7 +2766,7 @@ function renderCuentas() {
         <div class="cuenta-header" onclick="toggleCuenta('${cardId}')">
           <div>
             <div class="cuenta-plat">${c.nombre}</div>
-            <div class="cuenta-correo">${c.correo}</div>
+            <div class="cuenta-correo" onclick="event.stopPropagation();copiarCorreoCuenta('${nombreSeguroCuenta}')" style="cursor:pointer;" title="Toca para copiar el correo">${c.correo} 📋</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="text-align:right;">
@@ -2768,15 +2774,20 @@ function renderCuentas() {
               <div style="font-size:11px;color:var(--text3);">${ocupados} ocupado${ocupados!==1?'s':''}</div>
             </div>
             <div class="cuenta-slots-summary">${slotsMini}</div>
+            ${MI_ROL==='admin' ? `<button onclick="event.stopPropagation();copiarAcceso('${nombreSeguroCuenta}')" title="Copiar correo y contraseña" style="background:var(--surface);border:1px solid var(--border-strong);border-radius:9px;width:34px;height:34px;font-size:15px;cursor:pointer;color:var(--text2);flex-shrink:0;line-height:1;">📋</button>` : ''}
           </div>
         </div>
         <div class="cuenta-body" id="${cardId}">
           <div class="cuenta-info">
             <div class="cuenta-info-item">
-              <div class="cuenta-info-label">Contraseña</div>
-              <div class="cuenta-info-value" id="pass-${cardId}" style="filter:blur(4px);cursor:pointer;" onclick="togglePass('pass-${cardId}')">${c.contrasena||'—'}</div>
+              <div class="cuenta-info-label">📧 Correo · toca para copiar</div>
+              <div class="cuenta-info-value" style="cursor:pointer;" onclick="copiarCorreoCuenta('${nombreSeguroCuenta}')">${c.correo||'—'}</div>
             </div>
             <div class="cuenta-info-item">
+              <div class="cuenta-info-label">🔑 Contraseña · toca para copiar</div>
+              <div class="cuenta-info-value" id="pass-${cardId}" style="filter:blur(4px);cursor:pointer;" onclick="copiarPassCuenta('${nombreSeguroCuenta}','pass-${cardId}')">${c.contrasena||'—'}</div>
+            </div>
+            <div class="cuenta-info-item" style="grid-column:1/-1;">
               <div class="cuenta-info-label">Cuenta de pago</div>
               <div class="cuenta-info-value">${c.cuentaPago||'—'}</div>
             </div>
@@ -2810,6 +2821,54 @@ function toggleCuenta(id) {
 function togglePass(id) {
   const el = document.getElementById(id);
   el.style.filter = el.style.filter ? '' : 'blur(4px)';
+}
+
+// ===== Copiar datos de acceso de una cuenta (correo + contraseña) =====
+// Un toque y listo para pegar — sin tener que abrir/cerrar la tarjeta ni
+// quitar el desenfoque de la contraseña a mano.
+function copiarTexto_(texto, mensajeOk) {
+  const ok = () => toast(mensajeOk || 'Copiado', 'success', '📋');
+  const fail = () => toast('No se pudo copiar', 'error');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(texto).then(ok).catch(() => { copiarFallback_(texto) ? ok() : fail(); });
+  } else {
+    copiarFallback_(texto) ? ok() : fail();
+  }
+}
+// Respaldo para navegadores que no soportan navigator.clipboard.
+function copiarFallback_(texto) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = texto; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    const exito = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return exito;
+  } catch (e) { return false; }
+}
+function copiarAcceso(nombreCuenta) {
+  const c = todasCuentas.find(x => x.nombre === nombreCuenta);
+  if (!c) { toast('Cuenta no encontrada', 'error'); return; }
+  const texto = `${c.nombre}\nCorreo: ${c.correo || ''}\nContraseña: ${c.contrasena || ''}`;
+  copiarTexto_(texto, 'Acceso copiado ✓');
+}
+// Copiado individual: tocar el correo copia SOLO el correo; tocar la contraseña
+// copia SOLO la contraseña (y la revela como confirmación). Pensado para entrar
+// rápido a una cuenta: pegas el correo en un campo y la clave en el otro.
+// Se busca el dato en todasCuentas (no se mete en el HTML) para no romper el
+// onclick con contraseñas que llevan comillas u otros caracteres raros.
+function copiarCorreoCuenta(nombreCuenta) {
+  const c = todasCuentas.find(x => x.nombre === nombreCuenta);
+  if (!c) return;
+  if (!c.correo) { toast('Esta cuenta no tiene correo', 'error'); return; }
+  copiarTexto_(c.correo, 'Correo copiado 📧');
+}
+function copiarPassCuenta(nombreCuenta, idCampo) {
+  const c = todasCuentas.find(x => x.nombre === nombreCuenta);
+  if (!c) return;
+  if (!c.contrasena) { toast('Esta cuenta no tiene contraseña visible', 'error'); return; }
+  copiarTexto_(c.contrasena, 'Contraseña copiada 🔑');
+  if (idCampo) { const el = document.getElementById(idCampo); if (el) el.style.filter = ''; }
 }
 
 function liberarSlot(nombreCuenta, slotIdx) {
