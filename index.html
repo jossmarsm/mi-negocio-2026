@@ -3098,7 +3098,7 @@ function abrirModalNuevaCuenta() {
 // del vendedor. Es el monto que luego se reparte entre los meses del ciclo.
 function montoBaseCliente_(c) {
   if (MI_ROL === 'admin') return parseFloat(c.ganancia) || 0;
-  const pd = PAQUETES_GANANCIA[c.paquete];
+  const pd = buscarDatosCombo_(c.paquete);
   if (!pd) return 0;
   const pct = COMISIONES[MI_VENDEDOR] !== undefined ? COMISIONES[MI_VENDEDOR] : 100;
   return (pd.gananciaAmigo || 0) * (pct/100);
@@ -3968,7 +3968,12 @@ function calcularRenovacionRenovar() {
   const d = fechaInputLocal(inicio); if(!d) return; d.setMonth(d.getMonth()+meses);
   document.getElementById('renovar-fecha-renovacion').value = formatoDDMMYYYY(d);
 
-  const gananciaNueva = calcularGananciaParaCliente_(paqueteParaGanancia, c.vendedor);
+  let gananciaNueva = calcularGananciaParaCliente_(paqueteParaGanancia, c.vendedor);
+  // Si el combo no está en el catálogo (nombre viejo) y se mantiene el mismo,
+  // usa la ganancia que ya tiene guardada el cliente — nunca mostrar $0.
+  if (gananciaNueva === 0 && !selVal) {
+    gananciaNueva = montoBaseCliente_(c);
+  }
   document.getElementById('renovar-ganancia-nueva').textContent = '$'+gananciaNueva.toFixed(2);
 }
 
@@ -4010,11 +4015,16 @@ function guardarRenovacion() {
   const precioNuevo  = selVal ? selVal.split('|')[1] : '';
   const paqueteCiclo = paqueteNuevo || c.paquete;
 
-  const gananciaNueva = calcularGananciaParaCliente_(paqueteCiclo, c.vendedor);
+  let gananciaNueva = calcularGananciaParaCliente_(paqueteCiclo, c.vendedor);
+  // Mismo fallback que en la vista previa: si el combo viejo no está en el
+  // catálogo y se mantiene, conserva la ganancia ya guardada del cliente.
+  if (gananciaNueva === 0 && !paqueteNuevo) {
+    gananciaNueva = montoBaseCliente_(c);
+  }
 
   // accion 'renovarCliente': el backend extiende fechas Y anota el abono de
   // comisión en el libro. (Editar normal NO toca el libro, a propósito.)
-  const datosPaqCiclo = PAQUETES_GANANCIA[paqueteCiclo];
+  const datosPaqCiclo = buscarDatosCombo_(paqueteCiclo);
   const gananciaAmigoRenovar = datosPaqCiclo ? (datosPaqCiclo.gananciaAmigo||0) : 0;
   const datos = {
     accion: 'renovarCliente', key: APP_KEY,
