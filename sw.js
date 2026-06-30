@@ -3,11 +3,17 @@
 // hay internet, sirve la última que guardó en caché. Solo cachea peticiones GET
 // (las llamadas al servidor de Google Apps Script son POST y nunca se cachean,
 // así que los datos siempre llegan en vivo).
-const CACHE = 'cuentas-v1';
+const CACHE = 'cuentas-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) => e.waitUntil(
+  caches.keys()
+    .then((nombres) => Promise.all(
+      nombres.filter((n) => n !== CACHE).map((n) => caches.delete(n))
+    ))
+    .then(() => self.clients.claim())
+));
 
 self.addEventListener('fetch', (e) => {
   const req = e.request;
