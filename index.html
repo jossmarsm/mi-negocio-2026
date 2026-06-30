@@ -1066,7 +1066,7 @@ body {
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Nueva fecha de inicio *</label>
+        <label class="form-label">Inicio de este ciclo *</label>
         <input class="form-input" type="date" id="renovar-inicio" onchange="calcularRenovacionRenovar()">
       </div>
       <div class="form-group">
@@ -3972,10 +3972,18 @@ function calcularRenovacionRenovar() {
   document.getElementById('renovar-ganancia-nueva').textContent = '$'+gananciaNueva.toFixed(2);
 }
 
+// Busca un combo por nombre exacto; si no encuentra, prueba prefijo (ej: "HOME TEATER" → "HOME TEATER NF+SP+YT+DIS+HBO")
+function buscarDatosCombo_(nombrePaquete) {
+  if (PAQUETES_GANANCIA[nombrePaquete]) return PAQUETES_GANANCIA[nombrePaquete];
+  const lower = (nombrePaquete||'').toLowerCase();
+  const key = Object.keys(PAQUETES_GANANCIA).find(k => k.toLowerCase().startsWith(lower) || lower.startsWith(k.toLowerCase()));
+  return key ? PAQUETES_GANANCIA[key] : null;
+}
+
 // Helper compartido: calcula cuánto generaría UNA venta/renovación de este
 // paquete para este vendedor, usando el % de comisión vigente.
 function calcularGananciaParaCliente_(nombrePaquete, vendedor) {
-  const datosCombo = PAQUETES_GANANCIA[nombrePaquete];
+  const datosCombo = buscarDatosCombo_(nombrePaquete);
   if (!datosCombo) return 0;
   const gananciaAmigo = datosCombo.gananciaAmigo || 0;
   const gananciaMia = datosCombo.gananciaNeta || 0;
