@@ -6,7 +6,7 @@
 <title>Cuentas Streaming</title>
 <!-- PWA: instalable en el celular como app -->
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#08080d">
+<meta name="theme-color" content="#0a0a0c">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -19,22 +19,27 @@
    ============================================ */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Rediseño jul-2026 "premium neutro" (ref: Amex/Instagram/Revolut oscuro):
+   fondo negro NEUTRO (sin tinte violeta), superficies sólidas (sin vidrio ni
+   blur), un solo acento azul sobrio, y cero glows. Las variables --violet/
+   --violet2 conservan su nombre para no tocar cientos de usos, pero ahora son
+   el azul de acento. */
 :root {
-  --bg: #08080d;
-  --bg-glow-1: #2d1f6e;
-  --bg-glow-2: #0f3d3a;
-  --surface: rgba(255,255,255,0.045);
-  --surface-solid: #14141f;
-  --surface-hover: rgba(255,255,255,0.07);
-  --border: rgba(255,255,255,0.08);
-  --border-strong: rgba(255,255,255,0.16);
-  --text: #f3f2fa;
-  --text2: #9d9bb5;
-  --text3: #6b6884;
+  --bg: #0a0a0c;
+  --bg-glow-1: #0a0a0c;
+  --bg-glow-2: #0a0a0c;
+  --surface: #131317;
+  --surface-solid: #131317;
+  --surface-hover: #1b1b21;
+  --border: #232329;
+  --border-strong: #34343d;
+  --text: #f5f5f7;
+  --text2: #a0a0ab;
+  --text3: #6e6e78;
 
-  --violet: #8b5cf6;
-  --violet2: #6366f1;
-  --violet-bg: rgba(139,92,246,0.12);
+  --violet: #0095f6;
+  --violet2: #0095f6;
+  --violet-bg: rgba(0,149,246,0.12);
 
   --green: #34d399;
   --green-bg: rgba(52,211,153,0.12);
@@ -67,13 +72,13 @@ body {
 
 .display { font-family: 'Space Grotesk', sans-serif; }
 
-/* ===== Ambient background glow ===== */
-.ambient { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
-.ambient::before, .ambient::after {
-  content: ''; position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.28;
-}
-.ambient::before { width: 560px; height: 560px; background: var(--bg-glow-1); top: -220px; left: -160px; }
-.ambient::after { width: 480px; height: 480px; background: var(--bg-glow-2); bottom: -180px; right: -120px; }
+/* Números estilo fintech: dígitos tabulares (columnas estables) y tracking
+   apretado en las cifras grandes — el número es el protagonista. */
+.metric-value, .pending-hero .big, .mini-stat .val, .earn-hero .big,
+.resumen-mes .rm-num, .ganancia-value { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+/* Los blobs de glow difuminado se eliminaron con el rediseño — fondo limpio. */
+.ambient { display: none; }
 
 @keyframes fadeUp { from { opacity:0; transform: translateY(10px);} to {opacity:1; transform: translateY(0);} }
 @keyframes fadeIn { from { opacity:0; } to {opacity:1;} }
@@ -86,9 +91,7 @@ body {
 
 /* ===== Topbar ===== */
 .topbar {
-  background: rgba(20,20,31,0.7);
-  backdrop-filter: blur(12px) saturate(160%);
-  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   padding: 14px 20px;
   /* En iPhone con isla dinámica/notch baja el contenido para que no choque. */
@@ -101,10 +104,9 @@ body {
 .topbar-brand { display: flex; align-items: center; gap: 10px; }
 .topbar-icon {
   width: 34px; height: 34px; border-radius: 10px;
-  background: linear-gradient(135deg, var(--violet), var(--violet2));
-  color: #fff; display: flex; align-items: center; justify-content: center;
+  background: #f5f5f7;
+  color: var(--bg); display: flex; align-items: center; justify-content: center;
   font-family: 'Space Grotesk'; font-size: 16px; font-weight: 700;
-  box-shadow: 0 0 18px rgba(139,92,246,0.45);
 }
 .topbar-title { font-family: 'Space Grotesk'; font-size: 15px; font-weight: 600; }
 .topbar-sub { font-size: 11px; color: var(--text3); margin-top: 1px; display: flex; align-items: center; gap: 5px; }
@@ -149,7 +151,7 @@ body {
 
 /* ===== Nav tabs ===== */
 .nav-tabs {
-  display: flex; gap: 4px; background: rgba(20,20,31,0.5); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  display: flex; gap: 4px; background: var(--bg);
   border-bottom: 1px solid var(--border); padding: 6px 16px; overflow-x: auto;
   position: sticky; top: calc(61px + env(safe-area-inset-top, 0px)); z-index: 99;
 }
@@ -158,7 +160,8 @@ body {
   white-space: nowrap; border-radius: 10px; transition: all 0.2s var(--ease); position: relative;
 }
 .nav-tab:hover { color: var(--text2); background: var(--surface); }
-.nav-tab.active { color: #fff; background: linear-gradient(135deg, var(--violet), var(--violet2)); box-shadow: 0 4px 14px -2px rgba(139,92,246,0.4); }
+/* Activo = píldora blanca con texto negro (lenguaje premium, sin glow). */
+.nav-tab.active { color: var(--bg); background: #f5f5f7; box-shadow: none; font-weight: 600; }
 
 /* ===== Metrics ===== */
 .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 18px 20px 8px; max-width: 960px; margin: 0 auto; }
@@ -195,7 +198,7 @@ body {
   font-size: 13px; font-weight: 500; animation: fadeUp 0.4s var(--ease) both;
 }
 .racha-banner.racha { background: linear-gradient(135deg, rgba(52,211,153,0.14), rgba(52,211,153,0.04)); border: 1px solid rgba(52,211,153,0.28); color: #6ee7b7; }
-.racha-banner.momentum { background: linear-gradient(135deg, rgba(139,92,246,0.14), rgba(99,102,241,0.04)); border: 1px solid rgba(139,92,246,0.28); color: #c4b5fd; }
+.racha-banner.momentum { background: rgba(0,149,246,0.10); border: 1px solid rgba(0,149,246,0.28); color: #7cc4fa; }
 .racha-banner strong { font-weight: 700; }
 .racha-emoji { font-size: 16px; flex-shrink: 0; }
 
@@ -206,7 +209,7 @@ body {
   width: 100%; padding: 11px 14px 11px 38px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   font-size: 14px; background: var(--surface); color: var(--text); outline: none; transition: all 0.2s var(--ease);
 }
-.search-wrap input:focus { border-color: var(--violet); background: var(--surface-hover); box-shadow: 0 0 0 3px rgba(139,92,246,0.12); }
+.search-wrap input:focus { border-color: var(--violet); background: var(--surface-hover); box-shadow: 0 0 0 3px rgba(0,149,246,0.12); }
 .search-icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text3); pointer-events: none; font-size: 14px; }
 
 .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -215,7 +218,7 @@ body {
   font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; transition: all 0.2s var(--ease);
 }
 .f-btn:hover { background: var(--surface-hover); border-color: var(--border-strong); }
-.f-btn.active { background: linear-gradient(135deg, var(--violet), var(--violet2)); color: #fff; border-color: transparent; box-shadow: 0 4px 14px -2px rgba(139,92,246,0.4); }
+.f-btn.active { background: #f5f5f7; color: var(--bg); border-color: transparent; box-shadow: none; }
 
 /* Selector "Ordenar por" (en la barra de búsqueda) */
 .orden-select {
@@ -233,7 +236,7 @@ body {
 }
 .accion-btn:hover { background: var(--surface-hover); border-color: var(--border-strong); }
 .accion-btn:active { transform: scale(0.94); }
-.accion-btn.active { background: linear-gradient(135deg, var(--violet), var(--violet2)); color: #fff; border-color: transparent; }
+.accion-btn.active { background: #f5f5f7; color: var(--bg); border-color: transparent; }
 
 /* Círculo de selección en cada tarjeta (modo selección múltiple) */
 .sel-check {
@@ -242,7 +245,7 @@ body {
   font-size: 14px; font-weight: 700; color: #fff; transition: all 0.15s var(--ease);
 }
 .sel-check.on { background: var(--violet); border-color: var(--violet); }
-.cliente-card.card-sel { border-color: var(--violet); background: rgba(139,92,246,0.08); }
+.cliente-card.card-sel { border-color: var(--violet); background: rgba(0,149,246,0.08); }
 
 /* Barra flotante con el conteo y el botón de envío */
 #barra-seleccion {
@@ -273,7 +276,7 @@ body {
   content-visibility: auto;
   contain-intrinsic-size: 0 66px;
 }
-.cliente-card:hover { border-color: rgba(139,92,246,0.45); background: var(--surface-hover); transform: translateY(-1px); }
+.cliente-card:hover { border-color: rgba(0,149,246,0.45); background: var(--surface-hover); transform: translateY(-1px); }
 .cliente-card:active { transform: scale(0.98) translateY(0); transition: transform 0.08s var(--ease); }
 
 .cuenta-header:active { background: rgba(255,255,255,0.03); }
@@ -359,17 +362,17 @@ body {
   background: var(--surface-solid); color: var(--text); padding: 8px;
 }
 .form-select option:disabled { color: var(--text3); }
-.form-input:focus, .form-select:focus { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(139,92,246,0.12); }
+.form-input:focus, .form-select:focus { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(0,149,246,0.12); }
 .form-input[readonly] { background: rgba(255,255,255,0.02); color: var(--text2); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .btn-primary {
   width: 100%; padding: 13px; border-radius: var(--radius-sm);
-  background: linear-gradient(135deg, var(--violet), var(--violet2)); color: #fff; border: none;
+  background: var(--violet); color: #fff; border: none;
   font-size: 14px; font-weight: 700; cursor: pointer; margin-top: 6px;
-  transition: all 0.2s var(--ease); box-shadow: 0 6px 18px -4px rgba(139,92,246,0.5);
+  transition: all 0.2s var(--ease);
 }
-.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 22px -4px rgba(139,92,246,0.6); }
+.btn-primary:hover { transform: translateY(-1px); background: #1ba3ff; }
 .btn-primary:active { transform: scale(0.98); }
 .btn-primary:disabled { background: var(--text3); cursor: not-allowed; box-shadow: none; transform: none; }
 
@@ -406,12 +409,12 @@ body {
 /* ===== FAB ===== */
 .fab {
   position: fixed; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); right: 24px; width: 58px; height: 58px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--violet), var(--violet2)); color: #fff; border: none;
-  font-size: 26px; cursor: pointer; box-shadow: 0 10px 30px -6px rgba(139,92,246,0.6);
+  background: #f5f5f7; color: var(--bg); border: none;
+  font-size: 26px; cursor: pointer; box-shadow: 0 10px 26px -8px rgba(0,0,0,0.7);
   display: flex; align-items: center; justify-content: center; z-index: 150;
   transition: transform 0.25s var(--ease), box-shadow 0.25s var(--ease);
 }
-.fab:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 14px 36px -6px rgba(139,92,246,0.7); }
+.fab:hover { transform: translateY(-3px) scale(1.04); box-shadow: 0 14px 32px -8px rgba(0,0,0,0.8); }
 .fab:active { transform: scale(0.94); }
 
 .empty { text-align: center; padding: 3.5rem 1rem; color: var(--text3); font-size: 14px; animation: fadeIn 0.4s; }
@@ -473,7 +476,7 @@ body {
   font-size: 12px; font-weight: 600; color: var(--text2); cursor: pointer; transition: all 0.2s var(--ease);
 }
 .plat-filter:hover { background: var(--surface-hover); }
-.plat-filter.active { background: linear-gradient(135deg, var(--violet), var(--violet2)); color: #fff; border-color: transparent; box-shadow: 0 4px 14px -2px rgba(139,92,246,0.4); }
+.plat-filter.active { background: #f5f5f7; color: var(--bg); border-color: transparent; box-shadow: none; }
 
 .delete-acc-btn {
   font-size: 11px; padding: 5px 10px; border-radius: 8px; border: 1px solid rgba(251,113,133,0.3);
@@ -491,11 +494,11 @@ body {
 
 /* ===== Earnings hero ===== */
 .earn-hero {
-  background: linear-gradient(135deg, rgba(139,92,246,0.16), rgba(99,102,241,0.06));
-  border: 1px solid rgba(139,92,246,0.28); border-radius: var(--radius-lg); padding: 20px;
+  background: linear-gradient(135deg, rgba(0,149,246,0.16), rgba(0,149,246,0.06));
+  border: 1px solid rgba(0,149,246,0.28); border-radius: var(--radius-lg); padding: 20px;
   animation: fadeUp 0.4s var(--ease) both;
 }
-.earn-hero .lbl { font-size: 11px; color: #c4b8f9; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+.earn-hero .lbl { font-size: 11px; color: #9d9bb5; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
 .earn-hero .big { font-family: 'Space Grotesk'; font-size: 30px; font-weight: 700; margin-top: 6px; }
 
 /* ===== Earnings v2: pending-first hero with progress ring ===== */
@@ -521,23 +524,20 @@ body {
 .gb-lbl { font-size: 11px; color: var(--text3); margin-top: 6px; }
 .grafica-nota { font-size: 11px; color: var(--text3); margin-top: 12px; }
 
+/* Tarjeta héroe estilo fintech: superficie elevada sólida, el número manda. */
 .pending-hero {
   position: relative; overflow: hidden;
-  background: linear-gradient(150deg, rgba(139,92,246,0.20), rgba(20,20,31,0.4) 60%);
-  border: 1px solid rgba(139,92,246,0.32); border-radius: var(--radius-lg);
+  background: #17171d;
+  border: 1px solid var(--border-strong); border-radius: var(--radius-lg);
   padding: 22px; display: flex; align-items: center; gap: 18px;
   animation: fadeUp 0.4s var(--ease) both;
-}
-.pending-hero::before {
-  content: ''; position: absolute; top: -60%; right: -30%; width: 260px; height: 260px;
-  background: radial-gradient(circle, rgba(139,92,246,0.25), transparent 70%); pointer-events: none;
 }
 .ring-wrap { position: relative; width: 92px; height: 92px; flex-shrink: 0; }
 .ring-wrap svg { transform: rotate(-90deg); }
 .ring-track { fill: none; stroke: rgba(255,255,255,0.08); stroke-width: 9; }
 .ring-progress { fill: none; stroke: url(#ringGrad); stroke-width: 9; stroke-linecap: round; transition: stroke-dashoffset 0.7s var(--ease); }
 .ring-center { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk'; font-size: 13px; font-weight: 700; color: var(--text2); }
-.pending-hero .lbl { font-size: 11px; color: #c4b8f9; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; }
+.pending-hero .lbl { font-size: 11px; color: #9d9bb5; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 700; }
 .pending-hero .big { font-family: 'Space Grotesk'; font-size: 32px; font-weight: 700; margin-top: 4px; line-height: 1; }
 .pending-hero .sub { font-size: 12px; color: var(--text2); margin-top: 6px; }
 .pending-hero.all-paid .big { color: var(--green); }
@@ -569,7 +569,7 @@ body {
 .tour-overlay.open { display: block; }
 .tour-spotlight {
   position: absolute; border-radius: 14px; pointer-events: none;
-  box-shadow: 0 0 0 4000px rgba(4,4,8,0.78), 0 0 0 3px rgba(139,92,246,0.7), 0 0 24px rgba(139,92,246,0.5);
+  box-shadow: 0 0 0 4000px rgba(4,4,8,0.78), 0 0 0 3px rgba(0,149,246,0.7), 0 0 24px rgba(0,149,246,0.5);
   transition: top 0.35s var(--ease), left 0.35s var(--ease), width 0.35s var(--ease), height 0.35s var(--ease);
 }
 .tour-card {
@@ -585,9 +585,9 @@ body {
 .tour-skip { background: none; border: none; color: var(--text3); font-size: 12.5px; cursor: pointer; padding: 6px 4px; }
 .tour-skip:hover { color: var(--text2); }
 .tour-next {
-  background: linear-gradient(135deg, var(--violet), var(--violet2)); color: #fff; border: none;
+  background: var(--violet); color: #fff; border: none;
   padding: 9px 18px; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;
-  box-shadow: 0 6px 16px -4px rgba(139,92,246,0.5); transition: transform 0.15s var(--ease);
+  transition: transform 0.15s var(--ease);
 }
 .tour-next:active { transform: scale(0.95); }
 
@@ -626,7 +626,7 @@ body {
 }
 .login-card {
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: 24px;
-  padding: 32px 26px; width: 100%; max-width: 380px; backdrop-filter: blur(20px);
+  padding: 32px 26px; width: 100%; max-width: 380px;
   animation: scaleIn 0.4s var(--ease); position: relative; z-index: 2;
 }
 .login-card h2 { font-family: 'Space Grotesk'; font-size: 20px; margin-bottom: 6px; }
@@ -671,19 +671,19 @@ body {
       <div class="av" id="user-av">?</div>
       <span id="user-nombre">—</span>
     </div>
-    <button class="refresh-btn" id="btn-notif" onclick="abrirNotificaciones()" title="Notificaciones" style="position:relative;">🔔<span class="notif-badge" id="notif-badge" style="display:none;">0</span></button>
-    <button class="refresh-btn" id="btn-ayuda" onclick="iniciarTour(true)" title="Cómo funciona la app">❓</button>
+    <button class="refresh-btn" id="btn-notif" onclick="abrirNotificaciones()" title="Notificaciones" style="position:relative;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg><span class="notif-badge" id="notif-badge" style="display:none;">0</span></button>
+    <button class="refresh-btn" id="btn-ayuda" onclick="iniciarTour(true)" title="Cómo funciona la app"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:-2px;"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></button>
     <button class="refresh-btn" id="refresh-btn" onclick="recargarVista()">↻</button>
   </div>
 </div>
 
 <div class="nav-tabs" id="nav-tabs">
-  <div class="nav-tab active" id="tab-clientes" onclick="mostrarSeccion('clientes', this)">👥 Clientes</div>
-  <div class="nav-tab" id="tab-hoy" onclick="mostrarSeccion('hoy', this)">📋 Hoy</div>
-  <div class="nav-tab" id="tab-cuentas" onclick="mostrarSeccion('cuentas', this)">🔑 Cuentas</div>
-  <div class="nav-tab" id="tab-catalogo" onclick="mostrarSeccion('catalogo', this)">📦 Catálogo</div>
-  <div class="nav-tab" id="tab-ganancias" onclick="mostrarSeccion('ganancias', this)">📊 Ganancias</div>
-  <div class="nav-tab" id="tab-config" onclick="mostrarSeccion('config', this)">⚙️ Configuración</div>
+  <div class="nav-tab active" id="tab-clientes" onclick="mostrarSeccion('clientes', this)">Clientes</div>
+  <div class="nav-tab" id="tab-hoy" onclick="mostrarSeccion('hoy', this)">Hoy</div>
+  <div class="nav-tab" id="tab-cuentas" onclick="mostrarSeccion('cuentas', this)">Cuentas</div>
+  <div class="nav-tab" id="tab-catalogo" onclick="mostrarSeccion('catalogo', this)">Catálogo</div>
+  <div class="nav-tab" id="tab-ganancias" onclick="mostrarSeccion('ganancias', this)">Ganancias</div>
+  <div class="nav-tab" id="tab-config" onclick="mostrarSeccion('config', this)">Configuración</div>
 </div>
 
 <!-- SECCIÓN CLIENTES -->
@@ -699,7 +699,7 @@ body {
     <div id="alerta-container"></div>
     <div class="toolbar">
       <div class="search-wrap">
-        <span class="search-icon">🔍</span>
+        <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
         <input type="text" id="buscar" placeholder="Buscar cliente, paquete, vendedor o nota..." oninput="filtrar()">
       </div>
       <select id="orden-clientes" class="orden-select" onchange="setOrden(this.value)" title="Ordenar por">
@@ -744,7 +744,7 @@ body {
       <button id="btn-nueva-cuenta" onclick="abrirModalNuevaCuenta()" class="btn-primary" style="width:auto;margin-top:0;padding:9px 16px;font-size:13px;">+ Nueva cuenta</button>
     </div>
     <div class="search-wrap" style="margin-bottom:12px;">
-      <span class="search-icon">🔍</span>
+      <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
       <input type="text" id="buscar-cuenta" placeholder="Buscar cuenta, correo o cliente..." oninput="renderCuentas()">
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;" id="filtros-plataforma"></div>
@@ -1206,6 +1206,24 @@ const PLAT_ICONS = {
   'NETFLIX':'🎬','SPOTIFY':'🎵','YOUTUBE PREM':'▶️','YOUTUBE':'▶️',
   'HBO':'📺','DISNEY':'🏰','PARAMOUNT':'⭐','CRUNCHYROLL':'⚡','VIX':'🎞️'
 };
+
+// Color de marca de cada plataforma. Es el lenguaje visual de la app: el
+// chrome es negro neutro y el color lo pone el producto que vendes.
+const PLAT_COLORS = {
+  'NETFLIX':'#e50914','SPOTIFY':'#1db954','YOUTUBE PREM':'#ff0033','YOUTUBE':'#ff0033',
+  'HBO':'#9b51e0','DISNEY':'#0063e5','PARAMOUNT':'#3b7bff','CRUNCHYROLL':'#f47521','VIX':'#ff6a00'
+};
+
+// Barra vertical con los colores de las plataformas del combo (máx. 3
+// segmentos). Si el combo no se reconoce, queda una barra neutra.
+function barraPlataformas_(paquete) {
+  let plats = [];
+  try { plats = detectarPlataformas(paquete) || []; } catch(e) {}
+  const colores = plats.map(p => PLAT_COLORS[p]).filter(Boolean).slice(0,3);
+  if (!colores.length) colores.push('var(--border-strong)');
+  const segs = colores.map(col => `<div style="flex:1;background:${col};"></div>`).join('');
+  return `<div style="width:4px;height:38px;border-radius:2px;overflow:hidden;display:flex;flex-direction:column;gap:2px;flex-shrink:0;">${segs}</div>`;
+}
 
 // Gestión rápida por plataforma:
 //  - tipo 'password': se saca a la gente cambiando la contraseña → al cambiarla
@@ -2055,6 +2073,7 @@ function filtrar() {
     const accion = modoSeleccion ? `toggleSeleccion('${c.id}')` : `verDetalle('${c.id}')`;
     return `<div class="cliente-card${modoSeleccion&&sel?' card-sel':''}" style="${esArchivado?'opacity:0.55;':''}" onclick="${accion}">
       ${modoSeleccion ? `<div class="sel-check${sel?' on':''}">${sel?'✓':''}</div>` : ''}
+      ${barraPlataformas_(c.paquete)}
       ${esArchivado ? `<div class="avatar" style="background:var(--surface);color:var(--text3);">${iniciales(c.cliente)}</div>` : anilloHTML(c.estado, c.dias)}
       <div class="info">
         <div class="nombre">${esc(c.cliente)}${esV?`<span class="v-badge">${esc(c.vendedor)}</span>`:''}${esArchivado?'<span style="font-size:10px;padding:2px 7px;border-radius:99px;background:var(--surface);color:var(--text3);">Archivado</span>':''}</div>
@@ -3237,13 +3256,13 @@ function renderGanancias() {
   // (lo que de verdad estás generando ahora mismo). Lo de "este mes" pasa a ser
   // un dato secundario de actividad, para que no compita ni confunda con éste.
   const heroGananciaHTML = MI_ROL==='admin' ? `
-    <div class="mini-stat" style="background:linear-gradient(135deg,rgba(139,92,246,0.14),rgba(99,102,241,0.05));border:1px solid rgba(139,92,246,0.35);">
+    <div class="mini-stat" style="background:linear-gradient(135deg,rgba(0,149,246,0.14),rgba(0,149,246,0.05));border:1px solid rgba(0,149,246,0.35);">
       <div class="lbl">💰 Tu ganancia · clientes activos</div>
       <div class="val" style="font-size:32px;color:var(--violet2);margin-top:2px;">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
       <div class="sub" style="margin-top:6px;">Es el total que te dejan ahora mismo tus ${misClientes} clientes activos, ya descontadas las comisiones de tus vendedores.</div>
       <div style="font-size:12px;color:var(--text2);margin-top:6px;">${misClientesDirectos} propias directas · ${misClientes-misClientesDirectos} de tus vendedores</div>
     </div>` : `
-    <div class="mini-stat" style="background:linear-gradient(135deg,rgba(139,92,246,0.14),rgba(99,102,241,0.05));border:1px solid rgba(139,92,246,0.35);">
+    <div class="mini-stat" style="background:linear-gradient(135deg,rgba(0,149,246,0.14),rgba(0,149,246,0.05));border:1px solid rgba(0,149,246,0.35);">
       <div class="lbl">💰 Tu ganancia · clientes activos</div>
       <div class="val" style="font-size:32px;color:var(--violet2);margin-top:2px;">$${misGanancias.toLocaleString('es-MX',{minimumFractionDigits:0,maximumFractionDigits:2})}</div>
       <div class="sub" style="margin-top:6px;">Es lo que te corresponde ahora mismo de tus ${misClientes} clientes activos.</div>
@@ -3257,8 +3276,8 @@ function renderGanancias() {
         <div class="ring-wrap">
           <svg width="92" height="92" viewBox="0 0 92 92">
             <defs><linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="${todoAlCorriente?'#34d399':'#8b5cf6'}"/>
-              <stop offset="100%" stop-color="${todoAlCorriente?'#34d399':'#6366f1'}"/>
+              <stop offset="0%" stop-color="${todoAlCorriente?'#34d399':'#0095f6'}"/>
+              <stop offset="100%" stop-color="${todoAlCorriente?'#34d399':'#0095f6'}"/>
             </linearGradient></defs>
             <circle class="ring-track" cx="46" cy="46" r="${ringR}"/>
             <circle class="ring-progress" cx="46" cy="46" r="${ringR}" stroke-dasharray="${ringC}" stroke-dashoffset="${ringOffset}"/>
@@ -3326,7 +3345,7 @@ function vendorCardHTML(v, r, hist) {
         <div class="vendor-mini-ring">
           <svg width="38" height="38" viewBox="0 0 38 38">
             <circle cx="19" cy="19" r="${ringR}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5"/>
-            <circle cx="19" cy="19" r="${ringR}" fill="none" stroke="${alCorriente?'#34d399':'#8b5cf6'}" stroke-width="5" stroke-linecap="round"
+            <circle cx="19" cy="19" r="${ringR}" fill="none" stroke="${alCorriente?'#34d399':'#0095f6'}" stroke-width="5" stroke-linecap="round"
               stroke-dasharray="${ringC}" stroke-dashoffset="${ringOffset}" transform="rotate(-90 19 19)" style="transition:stroke-dashoffset 0.6s var(--ease);"/>
           </svg>
         </div>
