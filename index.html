@@ -2164,7 +2164,7 @@ function exportarCSV() {
   let totPrecio=0, totComic=0, totGan=0;
   const filas = lista.map(c=>{
     const esVend = c.vendedor && c.vendedor.toLowerCase()!=='yo';
-    const paqData = PAQUETES_GANANCIA[c.paquete];
+    const paqData = buscarDatosCombo_(c.paquete); // con prefijo: combos legados no salen en $0
     const pct = COMISIONES[(c.vendedor||'').toLowerCase()] !== undefined ? COMISIONES[(c.vendedor||'').toLowerCase()] : 100;
     const comic = (esVend && paqData) ? paqData.gananciaAmigo*(pct/100) : 0;
     const gan = parseFloat(c.ganancia)||0;
@@ -2206,7 +2206,7 @@ function verDetalle(id) {
   const col=colorAvatar(c.cliente);
   const ganancia=parseFloat(c.ganancia)||0;
   const esVendedor = c.vendedor && c.vendedor.toLowerCase()!=='yo';
-  const paqData = PAQUETES_GANANCIA[c.paquete];
+  const paqData = buscarDatosCombo_(c.paquete); // con prefijo: combos legados no salen en $0
   const pctVendedor = COMISIONES[c.vendedor.toLowerCase()] !== undefined ? COMISIONES[c.vendedor.toLowerCase()] : 100;
   const comisionVend = esVendedor && paqData ? paqData.gananciaAmigo * (pctVendedor/100) : 0;
   // Desglose visible solo en ventas de varios meses (donde el reparto confunde):
@@ -2594,7 +2594,10 @@ async function guardarCliente() {
   postDatos(datos)
     .then(res=>{
       if(res.status==='ok'){
-        ultimoID++;
+        // El backend pudo ajustar el ID si el propuesto ya existía (p. ej. dos
+        // dispositivos registrando sin refrescar) — sincronizamos el contador.
+        const idSrv = parseInt(String(res.id||'').replace('CL-',''));
+        ultimoID = (!isNaN(idSrv) && idSrv > ultimoID) ? idSrv : ultimoID + 1;
         marcarDatosSucios();
         const tieneTelefono = !!datos.contacto;
         ultimoClienteGuardado = datos;
@@ -3105,18 +3108,6 @@ function montoBaseCliente_(c) {
   return (pd.gananciaAmigo || 0) * (pct/100);
 }
 
-// Porción de la ganancia de este cliente que corresponde al mes (anio,mes).
-// Una venta de N meses reparte su monto en N partes iguales, una por cada mes
-// del ciclo a partir de su inicio. Las mensuales (N=1) caen todas en su mes.
-function porcionMesCliente_(c, anio, mes) {
-  const f = parseFecha(c.inicio); if (!f) return 0;
-  const meses = Math.max(1, parseInt(c.meses) || 1);
-  const inicioIdx = f.getFullYear()*12 + f.getMonth();
-  const objetivo = anio*12 + mes;
-  if (objetivo >= inicioIdx && objetivo < inicioIdx + meses) return montoBaseCliente_(c) / meses;
-  return 0;
-}
-
 function renderGanancias() {
   const vendedores = MI_ROL==='admin' ? ['ximenita','saito'] : [MI_VENDEDOR];
   const resumen = {};
@@ -3156,8 +3147,9 @@ function renderGanancias() {
       // Venta única 100% tuya (sin vendedor): te toca completa.
       if (esteMes) { misVentasUnicasMes += (parseFloat(vu.monto)||0); misVentasUnicasCount++; }
     } else if (resumen[v]!==undefined) {
-      resumen[v].ventasUnicas++;
-      if (esteMes) { misVentasUnicasMes += (parseFloat(vu.monto)||0)/2; misVentasUnicasCount++; } // tu mitad
+      // Solo las del mes en curso — el monto de la tarjeta también es mensual,
+      // así el conteo y el dinero siempre hablan del mismo periodo.
+      if (esteMes) { resumen[v].ventasUnicas++; misVentasUnicasMes += (parseFloat(vu.monto)||0)/2; misVentasUnicasCount++; } // tu mitad
     }
   });
   // Historial de pagos para mostrar (la hoja 'pagos' sigue siendo el registro visible).
@@ -3187,20 +3179,26 @@ function renderGanancias() {
   const heroSub = todoAlCorriente ? 'Al corriente — nada pendiente ✓' : `${Math.round(pctPagado)}% de lo generado ya está pagado`;
 
   // ===== Resumen del mes en curso =====
-  // "Altas y renovaciones": clientes cuyo INICIO de ciclo cae en este mes (alta
-  // o renovación). El DINERO se reparte: una venta de varios meses divide su
-  // ganancia entre sus meses, así julio/agosto reciben su parte de una venta
-  // hecha en junio, en vez de inflar solo junio.
+  // "Altas y renovaciones": EVENTOS del libro de comisiones (tipo venta o
+  // renovacion) con fecha en este mes. Antes se contaba por el 'inicio' de los
+  // clientes, pero como 'inicio' es inmutable tras el alta, las renovaciones se
+  // volvían invisibles — el libro registra cada evento con su fecha real.
+  // El dinero: para el admin, sus movimientos 'yo' del mes (ventas directas y
+  // renovaciones propias); para un vendedor, sus abonos del mes (el servidor
+  // ya le manda solo lo suyo).
   const _now = new Date();
   const _mA = _now.getMonth(), _aA = _now.getFullYear();
   const _mP = _mA===0?11:_mA-1, _aP = _mA===0?_aA-1:_aA;
+  const _vMio = MI_ROL==='admin' ? 'yo' : MI_VENDEDOR.toLowerCase();
   let nuevosMes=0, nuevosPrev=0, generadoMes=0;
-  todosClientes.forEach(c=>{
-    if(c.estado_raw==='ARCHIVADO') return;
-    const f = parseFecha(c.inicio); if(!f) return;
-    if(f.getMonth()===_mA && f.getFullYear()===_aA) nuevosMes++;
-    else if(f.getMonth()===_mP && f.getFullYear()===_aP) nuevosPrev++;
-    generadoMes += porcionMesCliente_(c, _aA, _mA);   // parte que toca a este mes
+  todasComisiones.forEach(m=>{
+    const tipo=(m.tipo||'').toLowerCase();
+    if(tipo!=='venta' && tipo!=='renovacion') return;
+    const f = parseFecha(m.fecha); if(!f) return;
+    if(f.getMonth()===_mA && f.getFullYear()===_aA){
+      nuevosMes++;
+      if((m.vendedor||'').toLowerCase()===_vMio) generadoMes += parseFloat(m.monto)||0;
+    } else if(f.getMonth()===_mP && f.getFullYear()===_aP) nuevosPrev++;
   });
   const difMes = nuevosMes - nuevosPrev;
   const _nombresMes = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -3249,7 +3247,7 @@ function renderGanancias() {
         <div class="lbl">📅 ${mesNombre} en curso</div>
         <div class="val">${nuevosMes}</div>
         <div class="sub">altas y renovaciones${difMes!==0?` · <span style="color:${difMes>0?'var(--green)':'var(--red)'};font-weight:700;">${difMes>0?'+':''}${difMes}</span> vs mes pasado`:` · igual que el mes pasado`}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:5px;">≈ $${generadoMes.toLocaleString('es-MX',{maximumFractionDigits:0})} de ganancia corresponden a ${mesNombre}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:5px;">$${generadoMes.toLocaleString('es-MX',{maximumFractionDigits:0})} ${MI_ROL==='admin'?'de tus ventas directas':'de comisión ganada'} en ${mesNombre}</div>
       </div>
     </div>
     ${MI_ROL==='admin' ? `
@@ -3291,7 +3289,7 @@ function vendorCardHTML(v, r, hist) {
   const nombreVisible = v==='ximenita' ? 'Xime' : v;
 
   const metaParts = [`${r.clientes} cliente${r.clientes!==1?'s':''} activo${r.clientes!==1?'s':''}`, `${pct}% comisión`];
-  if (r.ventasUnicas>0) metaParts.push(`${r.ventasUnicas} venta${r.ventasUnicas!==1?'s':''} única${r.ventasUnicas!==1?'s':''}`);
+  if (r.ventasUnicas>0) metaParts.push(`${r.ventasUnicas} venta${r.ventasUnicas!==1?'s':''} única${r.ventasUnicas!==1?'s':''} este mes`);
 
   return `
   <div class="vendor-card">
@@ -3406,7 +3404,11 @@ function saldoLedger_(vendedor) {
     if ((m.vendedor||'').toLowerCase() !== v) return;
     const monto = parseFloat(m.monto) || 0;
     nMov++;
-    if (monto >= 0) abonado += monto; else pagado += -monto;
+    // Solo el tipo 'pago' cuenta como pagado. Un AJUSTE negativo corrige lo
+    // abonado (no es un pago al vendedor) — antes se clasificaba por signo y
+    // los ajustes negativos inflaban el % pagado del anillo.
+    if ((m.tipo||'').toLowerCase().trim() === 'pago') pagado += -monto;
+    else abonado += monto;
   });
   return { abonado, pagado, saldo: abonado - pagado, nMov };
 }
@@ -3950,11 +3952,11 @@ function guardarNuevaCuenta() {
 }
 
 // ===== Renovar cliente =====
-// Distinto de "Editar": renovar SUMA una nueva comisión a la ganancia ya
-// acumulada (porque es una venta nueva en el tiempo), actualiza la fecha
-// de inicio del nuevo ciclo (clave para que el corte mensual detecte la
-// renovación como "generado este mes"), y empuja la renovación +30 días.
-// No permite cambiar de paquete aquí a propósito — eso es trabajo de Editar.
+// Distinto de "Editar": renovar SUMA un nuevo abono al libro de comisiones
+// (porque es una venta nueva en el tiempo) y empuja la fecha de renovación
+// según la duración del combo. 'inicio' NUNCA se toca — es la fecha histórica
+// de alta; el corte mensual detecta la renovación por el movimiento del libro,
+// que lleva la fecha real del evento. Permite upgrade de combo para el ciclo.
 function abrirRenovar(id) {
   const c = todosClientes.find(x => x.id === id);
   if (!c) return;
@@ -4354,6 +4356,9 @@ function confirmar(msg) {
 
 async function cerrarSesion() {
   if (!await confirmar('¿Cerrar sesión?')) return;
+  // Invalida el token en el SERVIDOR (deja de valer en todos lados), no solo
+  // en este teléfono. Si la red falla no bloqueamos el cierre local.
+  try { await fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'logout',key:APP_KEY})}); } catch(e){}
   try { localStorage.removeItem('app_key'); } catch(e){}
   location.reload();
 }
