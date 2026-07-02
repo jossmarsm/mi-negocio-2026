@@ -2232,6 +2232,33 @@ function verDetalle(id) {
         '</div>';
     }
   }
+  // ===== Historial de ciclos =====
+  // Los abonos del libro de comisiones que referencian a este cliente: cada
+  // alta y renovación quedó anotada ahí con su fecha real. Un vendedor solo
+  // recibe del servidor sus propios movimientos, así que aquí ve solo lo suyo.
+  const movsCliente = todasComisiones
+    .filter(m => (m.referencia||'').trim() === c.id && ['venta','renovacion'].includes((m.tipo||'').toLowerCase().trim()))
+    .reverse(); // más reciente primero
+  let historialHTML = '';
+  if (movsCliente.length) {
+    const etiquetaMonto = MI_ROL==='admin' ? (esVendedor ? 'abono a '+esc(c.vendedor) : 'tu ganancia') : 'tu comisión';
+    historialHTML = `
+    <div class="disclosure" onclick="this.classList.toggle('open');document.getElementById('hist-cli').classList.toggle('open')" style="color:var(--violet);">
+      <span class="chev">▾</span> 📜 Historial de ciclos (${movsCliente.length})
+    </div>
+    <div class="cuenta-body" id="hist-cli" style="border-top:none;margin-bottom:10px;">
+      ${movsCliente.map(m => {
+        const esAlta = (m.tipo||'').toLowerCase().trim()==='venta';
+        return `<div class="slot-row">
+          <div class="slot-num" style="width:auto;color:var(--text2);">${esc(m.fecha||'—')}</div>
+          <div class="slot-cliente" style="font-size:12px;">${esAlta?'🟢 Alta':'🔁 Renovación'}${m.nota?` · <span style="color:var(--text3);">${esc(m.nota)}</span>`:''}</div>
+          <div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);font-size:13px;" title="${etiquetaMonto}">$${(parseFloat(m.monto)||0).toFixed(2)}</div>
+        </div>`;
+      }).join('')}
+      <div style="font-size:10.5px;color:var(--text3);padding:6px 0 2px;">Montos: ${etiquetaMonto} por ciclo. El registro por fechas existe desde jul-2026.</div>
+    </div>`;
+  }
+
   document.getElementById('d-titulo').textContent=c.cliente;
   document.getElementById('d-contenido').innerHTML=`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
@@ -2258,6 +2285,7 @@ function verDetalle(id) {
       }
     </div>
     ${repartoHTML}
+    ${historialHTML}
     ${c.notas ? `<div style="background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📝 <strong>Nota:</strong> ${esc(c.notas)}</div>` : ''}`;
   const esArchivado = c.estado_raw==='ARCHIVADO';
   document.getElementById('d-contenido').innerHTML += esArchivado ? `
