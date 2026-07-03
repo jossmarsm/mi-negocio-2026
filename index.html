@@ -759,6 +759,12 @@ body {
       <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk';">Catálogo y comisiones</div>
       <div style="font-size:12.5px;color:var(--text2);margin-top:3px;" id="catalogo-sub">Precios actualizados y lo que te toca por cada venta</div>
     </div>
+    <div id="catalogo-novedades"></div>
+    <div class="search-wrap" style="margin-bottom:12px;">
+      <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+      <input type="text" id="buscar-combo" placeholder="Buscar combo o plataforma..." oninput="renderCatalogo()">
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;" id="filtros-plat-catalogo"></div>
     <div id="catalogo-content"><div class="loading">Cargando catálogo...</div></div>
   </div>
 </div>
@@ -1177,6 +1183,7 @@ const LINK_BIENVENIDA = 'https://www.facebook.com/share/p/1LpUAnuuGm/';
 
 let todosPagos = [];
 let todasVentasUnicas = [];
+let todosCambiosCatalogo = []; // historial de cambios de precio/comisión de combos
 let todasComisiones = []; // libro de movimientos de comisiones (hoja 'comisiones')
 let APP_KEY = '';
 let ultimoClienteGuardado = null; // datos del último cliente recién registrado, para el botón de bienvenida
@@ -1248,18 +1255,25 @@ let ordenActual = 'porvencer';   // criterio de orden de la lista de clientes
 let ultimoID = 1073;
 
 // ===== POST al servidor con reintento + manejo de sesión expirada =====
-// Hace la petición y, si falla por red, la reintenta UNA vez sola. Es seguro
-// incluso para operaciones de dinero porque todas llevan opId (el backend
-// ignora un opId repetido, así que un reintento nunca duplica un movimiento).
+// Hace la petición y, si falla, reintenta hasta 2 veces más (3 intentos en
+// total) con una pausa creciente. Es seguro incluso para operaciones de
+// dinero porque todas llevan opId (el backend ignora un opId repetido, así
+// que un reintento nunca duplica un movimiento).
+// Por qué 3 intentos y no 1: Apps Script "duerme" si no se usa un rato, y la
+// primera petición del día puede tardar varios segundos en despertar — antes,
+// con un solo reintento rápido (900ms), esos arranques lentos agotaban los 2
+// intentos y la app mostraba "No se pudo cargar" aunque el servidor sí hubiera
+// respondido bien unos segundos después.
 function postDatos(payload, intentos) {
-  intentos = intentos === undefined ? 1 : intentos;
+  intentos = intentos === undefined ? 2 : intentos;
   return fetch(SCRIPT_URL, {method:'POST', body: JSON.stringify(payload)})
     .then(r => { if (!r.ok) throw new Error('http '+r.status); return r.json(); })
     .then(res => { if (esErrorAuth_(res)) { forzarRelogin_(); throw new Error('auth'); } return res; })
     .catch(err => {
       // No reintentamos un error de sesión (no se arregla repitiendo).
       if (intentos > 0 && err.message !== 'auth') {
-        return new Promise(r => setTimeout(r, 900)).then(() => postDatos(payload, intentos - 1));
+        const espera = intentos === 2 ? 1200 : 2500; // más paciencia en el último intento
+        return new Promise(r => setTimeout(r, espera)).then(() => postDatos(payload, intentos - 1));
       }
       throw err;
     });
@@ -1548,14 +1562,13 @@ let todosCortesMensuales = [];
 
 function cargarHistorialMensual() {
   document.getElementById('historial-mensual-content').innerHTML = '<div class="loading">Cargando historial...</div>';
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'cortes_mensuales',key:APP_KEY})})
-    .then(r=>r.json())
+  postDatos({accion:'leerDatos',tipo:'cortes_mensuales',key:APP_KEY})
     .then(res=>{
       todosCortesMensuales = res.rows||[];
       renderHistorialMensual();
     })
     .catch(()=>{
-      document.getElementById('historial-mensual-content').innerHTML = '<div class="error-msg">⚠️ No se pudo cargar el historial mensual.</div>';
+      document.getElementById('historial-mensual-content').innerHTML = '<div class="error-msg">⚠️ No se pudo cargar el historial mensual. <a href="#" onclick="cargarHistorialMensual();return false;" style="color:inherit;text-decoration:underline;">Reintentar</a></div>';
     });
 }
 
@@ -2498,9 +2511,40 @@ function disponibilidadCombo(nombrePaquete) {
   return totalLibres;
 }
 
+let catalogoPlatFiltro = 'TODAS';
+function setCatalogoPlatFiltro(p, btn) {
+  catalogoPlatFiltro = p;
+  document.querySelectorAll('#filtros-plat-catalogo .plat-filter').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderCatalogo();
+}
+
+// Frase humana de qué cambió en un combo, según el rol de quien mira. A un
+// vendedor le importa SU comisión (ganancia_amigo); a Joss también su margen
+// (ganancia_neta) — eso nunca se le muestra a un vendedor.
+function fraseCambioCombo_(h, esAdmin) {
+  const partes = [];
+  const pAnt = parseFloat(h.precio_ant), pNew = parseFloat(h.precio_nuevo);
+  const aAnt = parseFloat(h.amigo_ant), aNew = parseFloat(h.amigo_nuevo);
+  const nAnt = parseFloat(h.neta_ant), nNew = parseFloat(h.neta_nuevo);
+  const cambioPrecio = !isNaN(pAnt) && !isNaN(pNew) && Math.abs(pAnt-pNew) > 0.001;
+  const cambioComision = !isNaN(aAnt) && !isNaN(aNew) && Math.abs(aAnt-aNew) > 0.001;
+  if (cambioPrecio) partes.push(`precio $${pAnt.toFixed(0)} → $${pNew.toFixed(0)}`);
+  if (esAdmin) {
+    if (cambioComision) partes.push(`comisión de vendedores $${aAnt.toFixed(2)} → $${aNew.toFixed(2)}`);
+    if (!isNaN(nAnt) && !isNaN(nNew) && Math.abs(nAnt-nNew) > 0.001) partes.push(`tu ganancia neta $${nAnt.toFixed(2)} → $${nNew.toFixed(2)}`);
+  } else if (cambioComision) {
+    const subio = aNew > aAnt;
+    partes.push(`tu comisión ${subio?'subió':'bajó'} de $${aAnt.toFixed(2)} a $${aNew.toFixed(2)}${subio?' 🎉':''}`);
+  } else if (cambioPrecio) {
+    partes.push('tu comisión sigue igual');
+  }
+  return partes.join(' · ');
+}
+
 function renderCatalogo() {
   const cont = document.getElementById('catalogo-content');
-  const combos = Object.entries(PAQUETES_GANANCIA);
+  let combos = Object.entries(PAQUETES_GANANCIA);
   if (!combos.length) {
     cont.innerHTML = `<div class="empty"><div class="empty-icon">📦</div><div class="empty-title">Sin combos cargados</div></div>`;
     return;
@@ -2509,13 +2553,70 @@ function renderCatalogo() {
   const esAdmin = MI_ROL === 'admin';
   const miPct = esAdmin ? 100 : (COMISIONES[MI_VENDEDOR] !== undefined ? COMISIONES[MI_VENDEDOR] : 100);
 
+  // ===== Panel "Novedades del catálogo" — cambios de los últimos 30 días =====
+  // No depende de la búsqueda ni del filtro: siempre visible arriba para que
+  // nadie se pierda un cambio de precio o comisión.
+  const novedadesEl = document.getElementById('catalogo-novedades');
+  if (novedadesEl) {
+    const hoy = new Date();
+    const cambiosRecientes = (todosCambiosCatalogo||[])
+      .map(h => ({h, f: parseFecha(h.fecha)}))
+      .filter(x => x.f && (hoy - x.f) <= 1000*60*60*24*30)
+      .sort((a,b) => b.f - a.f)
+      .slice(0, 8)
+      .map(x => ({h: x.h, frase: fraseCambioCombo_(x.h, esAdmin)}))
+      .filter(x => x.frase);
+    novedadesEl.innerHTML = !cambiosRecientes.length ? '' : `
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;margin-bottom:14px;">
+        <div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">🔔 Novedades del catálogo</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          ${cambiosRecientes.map(({h, frase}) => `<div style="font-size:12.5px;line-height:1.5;">
+            <span style="font-weight:700;">${esc(h.nombre)}</span>
+            <span style="color:var(--text2);"> — ${frase}</span>
+            <span style="color:var(--text3);"> · ${esc(h.fecha)}</span>
+          </div>`).join('')}
+        </div>
+      </div>`;
+  }
+
+  // ===== Filtro por plataforma (chips fuera del contenedor que se repinta) =====
+  const platsDisponibles = ['TODAS', ...new Set(combos.map(([n]) => detectarPlataformas(n)).flat())];
+  const chipsEl = document.getElementById('filtros-plat-catalogo');
+  if (chipsEl) {
+    chipsEl.innerHTML = platsDisponibles.map(p =>
+      `<button class="plat-filter${p===catalogoPlatFiltro?' active':''}" onclick="setCatalogoPlatFiltro('${p}',this)">${PLAT_ICONS[p]||'📦'} ${p}</button>`
+    ).join('');
+  }
+
+  // ===== Búsqueda + filtro =====
+  const elBuscar = document.getElementById('buscar-combo');
+  const q = (elBuscar && elBuscar.value || '').trim().toLowerCase();
+  if (q) combos = combos.filter(([n]) => n.toLowerCase().includes(q));
+  if (catalogoPlatFiltro !== 'TODAS') combos = combos.filter(([n]) => detectarPlataformas(n).includes(catalogoPlatFiltro));
+  combos.sort((a,b) => a[0].localeCompare(b[0], 'es'));
+
+  if (!combos.length) {
+    cont.innerHTML = `<div class="empty"><div class="empty-icon">🔎</div><div class="empty-title">Sin combos que coincidan</div><div class="empty-sub">Prueba otra búsqueda o quita el filtro de plataforma.</div></div>`;
+    return;
+  }
+
+  const hace14dias = new Date(); hace14dias.setDate(hace14dias.getDate()-14);
   cont.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">` + combos.map(([nombre, d]) => {
     const libres = disponibilidadCombo(nombre);
     const sinStock = libres <= 0;
     const miGanancia = esAdmin ? d.gananciaNeta : (d.gananciaAmigo * (miPct/100));
+    const plats = detectarPlataformas(nombre);
+    const cambioReciente = (todosCambiosCatalogo||[]).some(h => h.nombre === nombre && parseFecha(h.fecha) && parseFecha(h.fecha) >= hace14dias);
     return `<div class="cuenta-card" style="padding:14px 16px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">
-        <div style="font-size:13.5px;font-weight:700;flex:1;">${nombre}${(d.meses||1)>1?` <span style="font-size:11px;color:var(--violet2);">📆 ${d.meses} meses</span>`:''}</div>
+        <div style="flex:1;">
+          <div style="font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span title="${plats.join(', ')}">${plats.map(p=>PLAT_ICONS[p]||'📦').join('')}</span>
+            <span>${nombre}</span>
+            ${(d.meses||1)>1?`<span style="font-size:11px;color:var(--violet2);font-weight:600;">📆 ${d.meses} meses</span>`:''}
+            ${cambioReciente?'<span style="font-size:10px;font-weight:800;color:var(--amber);background:var(--amber-bg);padding:2px 7px;border-radius:99px;">ACTUALIZADO</span>':''}
+          </div>
+        </div>
         <div style="text-align:right;white-space:nowrap;">
           <div style="font-family:'Space Grotesk';font-size:16px;font-weight:700;color:var(--text);">$${d.precio}</div>
           ${(d.meses||1)>1?`<div style="font-size:10.5px;color:var(--text3);">≈ $${(d.precio/d.meses).toFixed(0)}/mes</div>`:''}
@@ -2676,8 +2777,7 @@ async function guardarCliente() {
 }
 
 function cargarCuentasBackground() {
-  return fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'cuentas',key:APP_KEY})})
-    .then(r => r.json())
+  return postDatos({accion:'leerDatos',tipo:'cuentas',key:APP_KEY})
     .then(res => {
       todasCuentas = mapearCuentas_(res.rows);
       cuentasCargadas = true;
@@ -2693,8 +2793,7 @@ function cargarCuentas(forzar) {
     return;
   }
   document.getElementById('cuentas-content').innerHTML = '<div class="loading">Cargando cuentas...</div>';
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'cuentas',key:APP_KEY})})
-    .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+  postDatos({accion:'leerDatos',tipo:'cuentas',key:APP_KEY})
     .then(res => {
       todasCuentas = mapearCuentas_(res.rows);
       cuentasCargadas = true;
@@ -2703,7 +2802,7 @@ function cargarCuentas(forzar) {
       actualizarNotificaciones();
     })
     .catch(() => {
-      document.getElementById('cuentas-content').innerHTML = '<div class="error-msg">⚠️ No se pudieron cargar las cuentas.</div>';
+      document.getElementById('cuentas-content').innerHTML = '<div class="error-msg">⚠️ No se pudieron cargar las cuentas. <a href="#" onclick="cargarCuentas(true);return false;" style="color:inherit;text-decoration:underline;">Reintentar</a></div>';
     });
 }
 
@@ -2850,10 +2949,13 @@ function renderCuentas() {
             if (!s) return `<div class="slot-row"><div class="slot-num">Slot ${i+1}</div><div class="slot-cliente"><span class="slot-libre-tag">✓ Libre</span></div></div>`;
             const cliente = todosClientes.find(cl => cl.id === s);
             const nombreCliente = cliente ? cliente.cliente : s;
+            // Solo es clicable si el cliente está en tu lista visible (todos
+            // para admin, solo los tuyos si eres vendedor) — evita clics
+            // muertos en slots de otro vendedor, sin exponer datos ajenos.
             return `<div class="slot-row">
               <div class="slot-num">Slot ${i+1}</div>
-              <div class="slot-cliente">${esc(nombreCliente)}<div style="font-size:11px;color:var(--text3);">${esc(s)}</div></div>
-              ${MI_ROL==='admin' ? `<button class="slot-action" onclick="liberarSlot('${c.nombre}','${i}')">Liberar</button>` : ''}
+              <div class="slot-cliente"${cliente ? ` style="cursor:pointer;" onclick="verDetalle('${s}')" title="Ver detalles de este cliente"` : ''}>${esc(nombreCliente)}${cliente ? ' <span style="color:var(--violet2);">›</span>' : ''}<div style="font-size:11px;color:var(--text3);">${esc(s)}</div></div>
+              ${MI_ROL==='admin' ? `<button class="slot-action" onclick="event.stopPropagation();liberarSlot('${c.nombre}','${i}')">Liberar</button>` : ''}
             </div>`;
           }).join('')}
           ${MI_ROL==='admin' ? renderAccionesCuenta(c) : ''}
@@ -3420,15 +3522,13 @@ function vendorCardHTML(v, r, hist) {
 }
 
 function cargarPagos() {
-  return fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'pagos',key:APP_KEY})})
-    .then(r=>r.json())
+  return postDatos({accion:'leerDatos',tipo:'pagos',key:APP_KEY})
     .then(res=>{ todosPagos = res.rows||[]; })
     .catch(()=>{ todosPagos = []; });
 }
 
 function cargarVentasUnicas() {
-  return fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'ventas_unicas',key:APP_KEY})})
-    .then(r=>r.json())
+  return postDatos({accion:'leerDatos',tipo:'ventas_unicas',key:APP_KEY})
     .then(res=>{ todasVentasUnicas = res.rows||[]; })
     .catch(()=>{ todasVentasUnicas = []; });
 }
@@ -3436,8 +3536,7 @@ function cargarVentasUnicas() {
 // Lee el libro de comisiones (hoja 'comisiones'). El saldo de cada vendedor
 // sale de aquí — NO de re-sumar clientes activos.
 function cargarLedger() {
-  return fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'ledger',key:APP_KEY})})
-    .then(r=>r.json())
+  return postDatos({accion:'leerDatos',tipo:'ledger',key:APP_KEY})
     .then(res=>{ todasComisiones = res.rows||[]; ledgerCargado = true; actualizarNotificaciones(); })
     .catch(()=>{ todasComisiones = []; });
 }
@@ -3837,8 +3936,7 @@ function cargarConfigLocal() {
 // sobreescribe lo que haya en localStorage. Se llama al iniciar sesión,
 // así que si Joss cambió el % desde otro dispositivo, aquí se refleja.
 function sincronizarComisionesServidor() {
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'comisiones',key:APP_KEY})})
-    .then(r=>r.json())
+  postDatos({accion:'leerDatos',tipo:'comisiones',key:APP_KEY})
     .then(res=>{
       const filas = res.rows||[];
       if (!filas.length) return;
@@ -3862,8 +3960,7 @@ function sincronizarComisionesServidor() {
 // cualquier dispositivo (el tuyo o el de un vendedor con permiso) aparece
 // igual para todos, no solo en el navegador donde se creó.
 function sincronizarCombosServidor() {
-  fetch(SCRIPT_URL,{method:'POST',body:JSON.stringify({accion:'leerDatos',tipo:'combos',key:APP_KEY})})
-    .then(r=>r.json())
+  postDatos({accion:'leerDatos',tipo:'combos',key:APP_KEY})
     .then(res=>{
       const filas = res.rows||[];
       if (!filas.length) return;
@@ -3887,6 +3984,19 @@ function sincronizarCombosServidor() {
       if (document.getElementById('config-content').innerHTML) renderConfig();
     })
     .catch(()=>{ /* si falla, nos quedamos con el catálogo fijo + localStorage */ });
+}
+
+// Historial de cambios de precio/comisión de combos (hoja 'combos_historial').
+// Se usa para el panel "Novedades del catálogo" que ve todo el mundo al abrir
+// esa pestaña — a un vendedor le muestra si SU comisión cambió o sigue igual;
+// a Joss le muestra también su propia ganancia neta.
+function sincronizarHistorialCatalogo_() {
+  return postDatos({accion:'leerDatos',tipo:'combos_historial',key:APP_KEY})
+    .then(res=>{
+      todosCambiosCatalogo = res.rows||[];
+      if (!document.getElementById('sec-catalogo').classList.contains('section-hidden')) renderCatalogo();
+    })
+    .catch(()=>{ /* sin historial no pasa nada grave, el catálogo funciona igual */ });
 }
 
 // ===== PENDIENTE 2: Agregar combos nuevos desde Configuración =====
@@ -4368,6 +4478,7 @@ function hacerLogin() {
         cargarLedger();
         sincronizarComisionesServidor();
         sincronizarCombosServidor();
+        sincronizarHistorialCatalogo_();
       } else {
         err.textContent = res.message || 'Usuario o clave incorrectos.';
         err.style.display='block';
@@ -4510,6 +4621,7 @@ window.addEventListener('resize', () => {
         cargarLedger();
         sincronizarComisionesServidor();
         sincronizarCombosServidor();
+        sincronizarHistorialCatalogo_();
       } else {
         try { localStorage.removeItem('app_key'); } catch(e){}
       }
