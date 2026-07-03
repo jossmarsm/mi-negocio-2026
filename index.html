@@ -3899,7 +3899,12 @@ function actualizarPaquete(idx, nombre) {
     // (el backend no las borra si no se envían).
     const plats = Array.isArray(PAQUETES_GANANCIA[nombre].plataformas) ? PAQUETES_GANANCIA[nombre].plataformas.join(',') : '';
     postDatos({accion:'agregarCombo',key:APP_KEY,nombre,precio,gananciaAmigo:amigo,gananciaNeta:neta,meses,plataformas:plats})
-      .then(()=>toast('Combo actualizado'))
+      .then(()=>{
+        toast('Combo actualizado');
+        // Refresca el historial de cambios YA, sin esperar a un nuevo login —
+        // así el panel "Novedades del catálogo" muestra este cambio al toque.
+        sincronizarHistorialCatalogo_();
+      })
       .catch(()=>toast('Se guardó local, pero no se pudo sincronizar con Sheets', 'error'));
   }
 }
