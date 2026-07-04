@@ -1094,6 +1094,7 @@ body {
         <div class="ganancia-value" id="renovar-ganancia-nueva">$0</div>
       </div>
     </div>
+    <div id="renovar-protegido-nota" style="display:none;background:var(--blue-bg);border:1px solid rgba(96,165,250,0.35);border-radius:12px;padding:10px 12px;font-size:12px;color:var(--blue);margin:-6px 0 14px;"></div>
     <input type="hidden" id="renovar-id">
     <button class="btn-primary" id="btn-renovar" onclick="guardarRenovacion()" style="background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 18px -4px rgba(52,211,153,0.5);">Confirmar renovación</button>
   </div>
@@ -1715,6 +1716,7 @@ function cargarDatos() {
           estado_raw: (f['estado'] || 'ACTIVO').toUpperCase(),
           notas:f['notas']||'',
           meses: Math.max(1, parseInt(f['meses'])||1),
+          congeladoHasta: f['congelado_hasta']||'',
         };
       });
       actualizarMetricas(); actualizarAlerta(); filtrar();
@@ -2348,6 +2350,7 @@ function verDetalle(id) {
     </div>
     ${repartoHTML}
     ${historialHTML}
+    ${clientePrecioProtegido_(c, false) ? `<div style="background:var(--blue-bg);border:1px solid rgba(96,165,250,0.35);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--blue);">🔒 Precio protegido hasta ${esc(c.congeladoHasta)} — el aumento de precio aún no le aplica.</div>` : ''}
     ${c.notas ? `<div style="background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📝 <strong>Nota:</strong> ${esc(c.notas)}</div>` : ''}`;
   const esArchivado = c.estado_raw==='ARCHIVADO';
   document.getElementById('d-contenido').innerHTML += esArchivado ? `
@@ -3733,6 +3736,14 @@ function renderConfig() {
 
     <div id="config-paquetes">
       <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Edita precios y ganancias. Los cambios aplican a nuevos clientes.</div>
+      <div style="background:var(--blue-bg);border:1px solid rgba(96,165,250,0.35);border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+        <div style="font-size:12.5px;font-weight:700;color:var(--blue);margin-bottom:6px;">🔒 Proteger clientes actuales de un aumento de precio</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px;line-height:1.5;">Antes de subir un precio aquí abajo, congela a tus clientes ACTIVOS de hoy: seguirán pagando su precio de siempre hasta la fecha que elijas, sin que tengas que hacer nada ese día. Los clientes nuevos que registres de ahora en adelante ya pagan el precio nuevo, sin protección.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="date" id="congelar-fecha" class="form-input" style="max-width:160px;">
+          <button class="btn-primary" style="width:auto;margin-top:0;padding:10px 16px;font-size:13px;" onclick="congelarClientesActivos()">Congelar clientes de hoy</button>
+        </div>
+      </div>
       <div style="display:flex;flex-direction:column;gap:8px;" id="lista-paquetes">
         ${paquetes.map(([nombre, datos], i) => `
           <div class="cuenta-card" style="padding:13px 15px;">
@@ -3911,6 +3922,27 @@ function showConfigTab(tab, btn) {
   document.getElementById('config-'+tab).style.display='block';
   document.querySelectorAll('#config-tabs .f-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
+}
+
+// Congela precio/ganancia de TODOS los clientes activos de HOY hasta la
+// fecha elegida — pensado para usarse justo ANTES de subir precios en el
+// catálogo. Un cliente nuevo dado de alta después de esto nunca queda
+// protegido, así que el precio nuevo le aplica de inmediato.
+async function congelarClientesActivos() {
+  const fecha = document.getElementById('congelar-fecha').value;
+  if (!fecha) { toast('Elige una fecha primero', 'error'); return; }
+  const fechaDDMMYYYY = formatoDDMMYYYY(fechaInputLocal(fecha));
+  const ok = await confirmar(`¿Congelar el precio de TODOS tus clientes activos hasta el ${fechaDDMMYYYY}?\n\nA partir de hoy, solo los clientes NUEVOS pagarán el precio que subas después. Los que ya tenías siguen con su precio de siempre hasta esa fecha.`);
+  if (!ok) return;
+  postDatos({accion:'congelarClientesActivos', key:APP_KEY, fechaLimite:fechaDDMMYYYY})
+    .then(res=>{
+      if (res.status==='ok') {
+        toast(`${res.congelados} clientes protegidos hasta ${fechaDDMMYYYY}`, 'success', '🔒');
+        marcarDatosSucios();
+        cargarDatos();
+      } else throw new Error(res.message);
+    })
+    .catch(err=>toast('No se pudo congelar: '+(err.message||'error'), 'error'));
 }
 
 function actualizarPaquete(idx, nombre) {
@@ -4179,6 +4211,18 @@ function abrirRenovar(id) {
   document.getElementById('modal-renovar').classList.add('open');
 }
 
+// ¿Este cliente conserva su precio/ganancia viejos en ESTA renovación? Solo
+// aplica si ya tiene 'congeladoHasta' puesto (ver congelarClientesActivos en
+// Code.gs), esa fecha aún no llegó, y no está haciendo upgrade de combo (un
+// combo nuevo es un producto distinto, no le aplica el precio congelado del
+// viejo). El servidor vuelve a checar esto mismo — aquí es solo para que la
+// vista previa no muestre un número que luego el backend va a ignorar.
+function clientePrecioProtegido_(c, esUpgrade) {
+  if (esUpgrade || !c.congeladoHasta) return false;
+  const f = parseFecha(c.congeladoHasta);
+  return !!(f && new Date() < f);
+}
+
 function calcularRenovacionRenovar() {
   const inicio = document.getElementById('renovar-inicio').value;
   if (!inicio) return;
@@ -4193,13 +4237,22 @@ function calcularRenovacionRenovar() {
   const d = fechaInputLocal(inicio); if(!d) return; d.setMonth(d.getMonth()+meses);
   document.getElementById('renovar-fecha-renovacion').value = formatoDDMMYYYY(d);
 
-  let gananciaNueva = calcularGananciaParaCliente_(paqueteParaGanancia, c.vendedor);
-  // Si el combo no está en el catálogo (nombre viejo) y se mantiene el mismo,
-  // usa la ganancia que ya tiene guardada el cliente — nunca mostrar $0.
-  if (gananciaNueva === 0 && !selVal) {
+  const protegido = clientePrecioProtegido_(c, !!selVal);
+  let gananciaNueva;
+  if (protegido) {
     gananciaNueva = montoBaseCliente_(c);
+  } else {
+    gananciaNueva = calcularGananciaParaCliente_(paqueteParaGanancia, c.vendedor);
+    // Si el combo no está en el catálogo (nombre viejo) y se mantiene el mismo,
+    // usa la ganancia que ya tiene guardada el cliente — nunca mostrar $0.
+    if (gananciaNueva === 0 && !selVal) gananciaNueva = montoBaseCliente_(c);
   }
   document.getElementById('renovar-ganancia-nueva').textContent = '$'+gananciaNueva.toFixed(2);
+  const nota = document.getElementById('renovar-protegido-nota');
+  if (nota) {
+    nota.style.display = protegido ? 'block' : 'none';
+    if (protegido) nota.textContent = '🔒 Precio protegido hasta ' + c.congeladoHasta + ' — este cliente aún no paga el aumento.';
+  }
 }
 
 // Busca un combo por nombre exacto; si no encuentra, prueba prefijo (ej: "HOME TEATER" → "HOME TEATER NF+SP+YT+DIS+HBO")
@@ -4240,11 +4293,21 @@ function guardarRenovacion() {
   const precioNuevo  = selVal ? selVal.split('|')[1] : '';
   const paqueteCiclo = paqueteNuevo || c.paquete;
 
-  let gananciaNueva = calcularGananciaParaCliente_(paqueteCiclo, c.vendedor);
-  // Mismo fallback que en la vista previa: si el combo viejo no está en el
-  // catálogo y se mantiene, conserva la ganancia ya guardada del cliente.
-  if (gananciaNueva === 0 && !paqueteNuevo) {
+  // Precio protegido: se manda lo mismo que el cliente ya tenía, para que lo
+  // que se ve en la vista previa sea justo lo que se guarda (el servidor lo
+  // vuelve a verificar de todos modos, esto es solo para no mostrar un número
+  // que luego no coincida).
+  const protegido = clientePrecioProtegido_(c, !!paqueteNuevo);
+  let gananciaNueva, precioFinal;
+  if (protegido) {
     gananciaNueva = montoBaseCliente_(c);
+    precioFinal = c.precio;
+  } else {
+    gananciaNueva = calcularGananciaParaCliente_(paqueteCiclo, c.vendedor);
+    // Mismo fallback que en la vista previa: si el combo viejo no está en el
+    // catálogo y se mantiene, conserva la ganancia ya guardada del cliente.
+    if (gananciaNueva === 0 && !paqueteNuevo) gananciaNueva = montoBaseCliente_(c);
+    precioFinal = precioNuevo; // vacío = mantener el mismo
   }
 
   // accion 'renovarCliente': el backend extiende fechas Y anota el abono de
@@ -4260,7 +4323,7 @@ function guardarRenovacion() {
     ganancia: gananciaNueva.toFixed(2),
     gananciaAmigo: gananciaAmigoRenovar.toFixed(2),
     paquete: paqueteNuevo,   // vacío = mantener el mismo
-    precio: precioNuevo,
+    precio: precioFinal,
     meses: mesesCombo(paqueteCiclo),
     opId: renovarOpId,
   };
@@ -4272,7 +4335,7 @@ function guardarRenovacion() {
     .then(res => {
       if (res.status === 'ok') {
         document.getElementById('renovar-status').innerHTML = '<div class="success-box"><p>✅ Renovación registrada</p></div>';
-        toast('Cliente renovado, ¡a seguir!', 'success', '🔁');
+        toast(res.precioProtegido ? 'Renovado con precio protegido 🔒' : 'Cliente renovado, ¡a seguir!', 'success', '🔁');
         marcarDatosSucios();
         setTimeout(() => { cerrarModal('modal-renovar'); cargarDatos(); }, 1000);
       } else throw new Error(res.message);
@@ -4719,4 +4782,3 @@ if ('serviceWorker' in navigator) {
 </div>
 </body>
 </html>
-
