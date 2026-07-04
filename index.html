@@ -683,6 +683,7 @@ body {
   <div class="nav-tab" id="tab-cuentas" onclick="mostrarSeccion('cuentas', this)">Cuentas</div>
   <div class="nav-tab" id="tab-catalogo" onclick="mostrarSeccion('catalogo', this)">Catálogo</div>
   <div class="nav-tab" id="tab-ganancias" onclick="mostrarSeccion('ganancias', this)">Ganancias</div>
+  <div class="nav-tab" id="tab-comprobantes" onclick="mostrarSeccion('comprobantes', this)">Comprobantes</div>
   <div class="nav-tab" id="tab-config" onclick="mostrarSeccion('config', this)">Configuración</div>
 </div>
 
@@ -766,6 +767,21 @@ body {
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;" id="filtros-plat-catalogo"></div>
     <div id="catalogo-content"><div class="loading">Cargando catálogo...</div></div>
+  </div>
+</div>
+
+<!-- SECCIÓN COMPROBANTES -->
+<div id="sec-comprobantes" class="section-hidden">
+  <div class="content" style="padding-top:20px;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk';">Comprobantes de pago</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-top:3px;">Se suben desde la ficha de cada cliente · guardados en tu Drive</div>
+    </div>
+    <div class="search-wrap" style="margin-bottom:16px;">
+      <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+      <input type="text" id="buscar-comprobante" placeholder="Buscar por cliente o paquete..." oninput="renderComprobantes()">
+    </div>
+    <div id="comprobantes-content"><div class="loading">Cargando comprobantes...</div></div>
   </div>
 </div>
 
@@ -1100,6 +1116,29 @@ body {
   </div>
 </div>
 
+<!-- MODAL SUBIR COMPROBANTE -->
+<div class="modal-overlay" id="modal-comprobante">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header">
+      <div class="modal-title">📎 Subir comprobante</div>
+      <button class="modal-close" onclick="cerrarModal('modal-comprobante')">✕</button>
+    </div>
+    <div id="comp-status"></div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Cliente: <strong id="comp-cliente-nombre" style="color:var(--text);">—</strong></div>
+    <div class="form-group">
+      <label class="form-label">Foto o PDF del comprobante *</label>
+      <input class="form-input" type="file" id="comp-archivo" accept="image/*,.pdf" capture="environment" onchange="previsualizarComprobante(this)">
+      <div id="comp-preview"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Monto (opcional)</label>
+      <input class="form-input" type="number" id="comp-monto" placeholder="0.00">
+    </div>
+    <input type="hidden" id="comp-cliente-id">
+    <button class="btn-primary" id="btn-comprobante" onclick="guardarComprobante()">Subir comprobante</button>
+  </div>
+</div>
+
 <!-- MODAL EDITAR DATOS DE CUENTA -->
 <div class="modal-overlay" id="modal-editar-cuenta">
   <div class="modal" style="max-width:420px;">
@@ -1185,6 +1224,9 @@ const LINK_BIENVENIDA = 'https://www.facebook.com/share/p/1LpUAnuuGm/';
 let todosPagos = [];
 let todasVentasUnicas = [];
 let todosCambiosCatalogo = []; // historial de cambios de precio/comisión de combos
+let todosComprobantes = []; // comprobantes de pago subidos a Drive
+let comprobantesCargados = false;
+let comprobanteClienteActual = null; // cliente para el que se está subiendo un comprobante
 let todasComisiones = []; // libro de movimientos de comisiones (hoja 'comisiones')
 let APP_KEY = '';
 let ultimoClienteGuardado = null; // datos del último cliente recién registrado, para el botón de bienvenida
@@ -1506,6 +1548,10 @@ function mostrarSeccion(sec, btn) {
   if (sec==='ganancias') {
     if (gananciasCargadas) renderGanancias();
     else cargarGanancias();
+  }
+  if (sec==='comprobantes') {
+    if (comprobantesCargados) renderComprobantes();
+    else { document.getElementById('comprobantes-content').innerHTML = '<div class="loading">Cargando comprobantes...</div>'; cargarComprobantes().then(renderComprobantes); }
   }
   if (sec==='config') renderConfig();
 }
@@ -2265,8 +2311,11 @@ function exportarCuentas() {
   else { toast('Cargando cuentas...'); cargarCuentasBackground().then(hacer); }
 }
 
+let detalleAbiertoId = null; // para saber si el modal sigue mostrando este mismo cliente cuando lleguen los comprobantes
+
 function verDetalle(id) {
   const c=todosClientes.find(x=>x.id===id); if(!c) return;
+  detalleAbiertoId = id;
   const col=colorAvatar(c.cliente);
   const ganancia=parseFloat(c.ganancia)||0;
   const esVendedor = c.vendedor && c.vendedor.toLowerCase()!=='yo';
@@ -2323,6 +2372,24 @@ function verDetalle(id) {
     </div>`;
   }
 
+  // ===== Comprobantes de pago subidos para este cliente =====
+  const misComprobantes = todosComprobantes.filter(cp => (cp.cliente_id||'').trim() === c.id);
+  let comprobantesHTML = '';
+  if (misComprobantes.length) {
+    comprobantesHTML = `
+    <div class="disclosure" onclick="this.classList.toggle('open');document.getElementById('comp-cli').classList.toggle('open')" style="color:var(--blue);">
+      <span class="chev">▾</span> 📎 Comprobantes (${misComprobantes.length})
+    </div>
+    <div class="cuenta-body" id="comp-cli" style="border-top:none;margin-bottom:10px;">
+      ${misComprobantes.slice().reverse().map(cp => `
+        <div class="slot-row">
+          <div class="slot-num" style="width:auto;color:var(--text2);">${esc(cp.fecha||'—')}</div>
+          <div class="slot-cliente" style="font-size:12px;">${esc(cp.paquete||'')}${cp.monto&&parseFloat(cp.monto)>0?' · $'+parseFloat(cp.monto).toFixed(2):''}</div>
+          <a href="${esc(cp.drive_url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--blue);font-weight:700;">Ver</a>
+        </div>`).join('')}
+    </div>`;
+  }
+
   document.getElementById('d-titulo').textContent=c.cliente;
   document.getElementById('d-contenido').innerHTML=`
     <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;">
@@ -2350,6 +2417,7 @@ function verDetalle(id) {
     </div>
     ${repartoHTML}
     ${historialHTML}
+    ${comprobantesHTML}
     ${clientePrecioProtegido_(c, false) ? `<div style="background:var(--blue-bg);border:1px solid rgba(96,165,250,0.35);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--blue);">🔒 Precio protegido hasta ${esc(c.congeladoHasta)} — el aumento de precio aún no le aplica.</div>` : ''}
     ${c.notas ? `<div style="background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📝 <strong>Nota:</strong> ${esc(c.notas)}</div>` : ''}`;
   const esArchivado = c.estado_raw==='ARCHIVADO';
@@ -2358,8 +2426,20 @@ function verDetalle(id) {
     ${(c.pago||'').toUpperCase()==='PENDIENTE' ? `<button onclick="marcarPagado('${c.id}')" class="btn-secondary green" style="margin-top:4px;">✅ Marcar como pagado</button>` : ''}
     <button onclick="abrirRenovar('${c.id}')" class="btn-primary" style="margin-top:8px;background:linear-gradient(135deg,#34d399,#10b981);box-shadow:0 6px 18px -4px rgba(52,211,153,0.5);">🔁 Renovar cliente</button>
     <button onclick="abrirEditar('${c.id}')" class="btn-primary" style="margin-top:8px;">✏️ Editar cliente</button>
+    <button onclick="abrirModalComprobante('${c.id}')" class="btn-primary" style="margin-top:8px;background:var(--surface);color:var(--text);border:1px solid var(--border);box-shadow:none;">📎 Subir comprobante</button>
     <button onclick="confirmarArchivar('${c.id}')" class="btn-secondary">Archivar cliente</button>`;
   document.getElementById('modal-detalle').classList.add('open');
+
+  // Comprobantes: NO se cargan en cada login (a diferencia del libro de
+  // comisiones, no hacen falta para nada de la pantalla principal) — se piden
+  // la primera vez que de verdad hacen falta, y la ficha se repinta sola en
+  // cuanto llegan, sin bloquear la apertura del modal. Si el usuario ya cerró
+  // la ficha o abrió la de otro cliente cuando lleguen, no se hace nada.
+  if (!comprobantesCargados) {
+    cargarComprobantes().then(() => {
+      if (detalleAbiertoId === id && document.getElementById('modal-detalle').classList.contains('open')) verDetalle(id);
+    });
+  }
 }
 
 // Marca un cliente como PAGADO sin abrir el editor completo. NO toca el libro de
@@ -3577,6 +3657,132 @@ function cargarLedger() {
   return postDatos({accion:'leerDatos',tipo:'ledger',key:APP_KEY})
     .then(res=>{ todasComisiones = res.rows||[]; ledgerCargado = true; actualizarNotificaciones(); })
     .catch(()=>{ todasComisiones = []; });
+}
+
+// ===== Comprobantes de pago (guardados en Drive) =====
+// Un vendedor solo recibe (del servidor) los suyos; el admin, todos.
+function cargarComprobantes(forzar) {
+  if (comprobantesCargados && !forzar) return Promise.resolve();
+  return postDatos({accion:'leerDatos', tipo:'comprobantes', key:APP_KEY})
+    .then(res => { todosComprobantes = res.rows||[]; comprobantesCargados = true; })
+    .catch(()=>{ todosComprobantes = []; });
+}
+
+function renderComprobantes() {
+  const cont = document.getElementById('comprobantes-content');
+  if (!cont) return;
+  const elBuscar = document.getElementById('buscar-comprobante');
+  const q = (elBuscar && elBuscar.value || '').trim().toLowerCase();
+  let lista = todosComprobantes.slice().reverse(); // más reciente primero
+  if (q) lista = lista.filter(cp => (cp.cliente_nombre||'').toLowerCase().includes(q) || (cp.paquete||'').toLowerCase().includes(q));
+  if (!lista.length) {
+    cont.innerHTML = `<div class="empty"><div class="empty-icon">📎</div><div class="empty-title">${q?'Sin resultados':'Sin comprobantes todavía'}</div><div class="empty-sub">${q?'Ninguno coincide con tu búsqueda.':'Se suben desde el botón "Subir comprobante" en la ficha de cada cliente.'}</div></div>`;
+    return;
+  }
+  cont.innerHTML = lista.map(cp => `
+    <div class="cuenta-card" style="padding:13px 16px;display:flex;align-items:center;gap:12px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13.5px;font-weight:700;">${esc(cp.cliente_nombre||'—')}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px;">${esc(cp.paquete||'')}${MI_ROL==='admin'&&cp.vendedor?' · '+esc(cp.vendedor):''} · ${esc(cp.fecha||'')}</div>
+      </div>
+      ${cp.monto&&parseFloat(cp.monto)>0?`<div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);white-space:nowrap;">$${parseFloat(cp.monto).toFixed(2)}</div>`:''}
+      <a href="${esc(cp.drive_url)}" target="_blank" rel="noopener" class="wa-btn" style="background:var(--blue-bg);border-color:rgba(96,165,250,0.35);color:var(--blue);" title="Ver comprobante">👁️</a>
+    </div>
+  `).join('');
+}
+
+function abrirModalComprobante(clienteId) {
+  const c = todosClientes.find(x => x.id === clienteId);
+  if (!c) return;
+  comprobanteClienteActual = c;
+  document.getElementById('comp-cliente-nombre').textContent = c.cliente;
+  document.getElementById('comp-monto').value = c.precio || '';
+  document.getElementById('comp-archivo').value = '';
+  document.getElementById('comp-preview').innerHTML = '';
+  document.getElementById('comp-status').innerHTML = '';
+  const btn = document.getElementById('btn-comprobante');
+  btn.disabled = false; btn.textContent = 'Subir comprobante';
+  document.getElementById('modal-comprobante').classList.add('open');
+}
+
+function previsualizarComprobante(input) {
+  const preview = document.getElementById('comp-preview');
+  const file = input.files[0];
+  if (!file) { preview.innerHTML=''; return; }
+  if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = e => { preview.innerHTML = `<img src="${e.target.result}" style="max-width:100%;border-radius:10px;margin-top:8px;">`; };
+    reader.readAsDataURL(file);
+  } else {
+    preview.innerHTML = `<div style="font-size:12px;color:var(--text2);margin-top:8px;">📄 ${esc(file.name)}</div>`;
+  }
+}
+
+// Redimensiona una foto a máx. 1400px de ancho y la comprime a JPEG — una
+// foto de cámara puede pesar varios MB; esto la baja a unos cientos de KB
+// para que la subida sea rápida incluso con datos móviles. Un PDF se manda
+// tal cual (no se puede recomprimir en el navegador de forma simple).
+function comprimirImagen_(file) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ base64: reader.result.split(',')[1], mimeType: file.type || 'application/octet-stream' });
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+      return;
+    }
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = e => {
+      img.onload = () => {
+        const MAX = 1400;
+        let w = img.width, h = img.height;
+        if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.75);
+        resolve({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg' });
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function guardarComprobante() {
+  const input = document.getElementById('comp-archivo');
+  const file = input.files[0];
+  const status = document.getElementById('comp-status');
+  if (!file) { status.innerHTML = '<div class="error-msg">⚠️ Elige una foto o PDF.</div>'; return; }
+  if (!comprobanteClienteActual) return;
+  const monto = document.getElementById('comp-monto').value;
+  const btn = document.getElementById('btn-comprobante');
+  btn.disabled = true; btn.textContent = 'Subiendo...';
+  status.innerHTML = '';
+  try {
+    const { base64, mimeType } = await comprimirImagen_(file);
+    const res = await postDatos({
+      accion:'subirComprobante', key:APP_KEY,
+      clienteId: comprobanteClienteActual.id,
+      clienteNombre: comprobanteClienteActual.cliente,
+      paquete: comprobanteClienteActual.paquete,
+      monto: monto,
+      archivo: base64, mimeType: mimeType, nombreArchivo: file.name
+    });
+    if (res.status === 'ok') {
+      status.innerHTML = '<div class="success-box"><p>✅ Comprobante guardado</p></div>';
+      toast('Comprobante subido a Drive', 'success', '📎');
+      comprobantesCargados = false; // fuerza recarga para que aparezca en la lista
+      const clienteId = comprobanteClienteActual.id;
+      setTimeout(()=>{ cerrarModal('modal-comprobante'); cargarComprobantes().then(()=>verDetalle(clienteId)); }, 1000);
+    } else throw new Error(res.message);
+  } catch(err) {
+    status.innerHTML = `<div class="error-msg">⚠️ No se pudo subir. Intenta de nuevo.<br><small>${esc(err.message||'')}</small></div>`;
+    btn.disabled = false; btn.textContent = 'Subir comprobante';
+  }
 }
 
 // Suma todos los movimientos de un vendedor en el libro y devuelve
