@@ -3975,53 +3975,51 @@ function cargarConfigLocal() {
 // Trae el % de comisión real desde el Sheet (fuente de verdad) y
 // sobreescribe lo que haya en localStorage. Se llama al iniciar sesión,
 // así que si Joss cambió el % desde otro dispositivo, aquí se refleja.
-function sincronizarComisionesServidor() {
-  postDatos({accion:'leerDatos',tipo:'comisiones',key:APP_KEY})
+function aplicarComisionesDesdeFilas_(filas) {
+  filas.forEach(f=>{
+    const v = (f['vendedor']||'').toLowerCase();
+    const pct = parseFloat(f['porcentaje']);
+    if (v && !isNaN(pct)) COMISIONES[v] = pct;
+  });
+}
+
+function aplicarCombosDesdeFilas_(filas) {
+  filas.forEach(f=>{
+    const nombre = f['nombre'];
+    const precio = parseFloat(f['precio']);
+    const amigo = parseFloat(f['ganancia_amigo']);
+    const neta = parseFloat(f['ganancia_neta']);
+    const plataformasStr = (f['plataformas']||'').trim();
+    const plataformas = plataformasStr ? plataformasStr.split(',').map(p=>p.trim()).filter(Boolean) : undefined;
+    const meses = Math.max(1, parseInt(f['meses'])||1);
+    if (nombre && !isNaN(precio)) {
+      PAQUETES_GANANCIA[nombre] = { precio, gananciaAmigo: isNaN(amigo)?0:amigo, gananciaNeta: isNaN(neta)?0:neta, meses };
+      if (plataformas && plataformas.length) PAQUETES_GANANCIA[nombre].plataformas = plataformas;
+    }
+  });
+}
+
+// Trae en UNA sola llamada (antes eran 3 peticiones separadas a Apps Script
+// cada vez que alguien entraba) el % de comisión de cada vendedor, el
+// catálogo de combos real y su historial de cambios. Menos idas y vueltas al
+// servidor = login más rápido y menos exposición a que una sola falle.
+// Se llama al iniciar sesión, así que un combo o % creado desde cualquier
+// dispositivo aparece igual para todos, no solo en el navegador donde se creó.
+function sincronizarConfigCatalogoServidor_() {
+  postDatos({accion:'leerDatosBatch', key:APP_KEY, tipos:['comisiones','combos','combos_historial']})
     .then(res=>{
-      const filas = res.rows||[];
-      if (!filas.length) return;
-      filas.forEach(f=>{
-        const v = (f['vendedor']||'').toLowerCase();
-        const pct = parseFloat(f['porcentaje']);
-        if (v && !isNaN(pct)) COMISIONES[v] = pct;
-      });
+      const d = res.datos||{};
+      aplicarComisionesDesdeFilas_(d['comisiones']||[]);
+      aplicarCombosDesdeFilas_(d['combos']||[]);
+      todosCambiosCatalogo = d['combos_historial']||[];
       guardarConfigLocal();
-      // Si la pestaña de Ganancias o Configuración ya está abierta, refrescar
+      // Refresca cualquier sección que ya esté abierta ahora mismo.
       if (!document.getElementById('sec-ganancias').classList.contains('section-hidden')) {
         Promise.all([cargarPagos(), cargarVentasUnicas()]).then(renderGanancias);
       }
-    })
-    .catch(()=>{ /* si falla, nos quedamos con lo de localStorage */ });
-}
-
-// Trae el catálogo de combos real desde la hoja 'combos' (fuente de
-// verdad) y lo fusiona sobre el catálogo fijo + lo que haya en
-// localStorage. Se llama al iniciar sesión, así que un combo creado desde
-// cualquier dispositivo (el tuyo o el de un vendedor con permiso) aparece
-// igual para todos, no solo en el navegador donde se creó.
-function sincronizarCombosServidor() {
-  postDatos({accion:'leerDatos',tipo:'combos',key:APP_KEY})
-    .then(res=>{
-      const filas = res.rows||[];
-      if (!filas.length) return;
-      filas.forEach(f=>{
-        const nombre = f['nombre'];
-        const precio = parseFloat(f['precio']);
-        const amigo = parseFloat(f['ganancia_amigo']);
-        const neta = parseFloat(f['ganancia_neta']);
-        const plataformasStr = (f['plataformas']||'').trim();
-        const plataformas = plataformasStr ? plataformasStr.split(',').map(p=>p.trim()).filter(Boolean) : undefined;
-        const meses = Math.max(1, parseInt(f['meses'])||1);
-        if (nombre && !isNaN(precio)) {
-          PAQUETES_GANANCIA[nombre] = { precio, gananciaAmigo: isNaN(amigo)?0:amigo, gananciaNeta: isNaN(neta)?0:neta, meses };
-          if (plataformas && plataformas.length) PAQUETES_GANANCIA[nombre].plataformas = plataformas;
-        }
-      });
-      guardarConfigLocal();
-      // Si alguna sección que muestra combos ya está abierta, refrescar
-      // para que el catálogo nuevo aparezca sin necesitar recargar la página.
       if (!document.getElementById('sec-catalogo').classList.contains('section-hidden')) renderCatalogo();
       if (document.getElementById('config-content').innerHTML) renderConfig();
+      actualizarNotificaciones();
     })
     .catch(()=>{ /* si falla, nos quedamos con el catálogo fijo + localStorage */ });
 }
@@ -4519,9 +4517,7 @@ function hacerLogin() {
         cargarDatos();
         cargarCuentasBackground();
         cargarLedger();
-        sincronizarComisionesServidor();
-        sincronizarCombosServidor();
-        sincronizarHistorialCatalogo_();
+        sincronizarConfigCatalogoServidor_();
       } else {
         err.textContent = res.message || 'Usuario o clave incorrectos.';
         err.style.display='block';
@@ -4662,9 +4658,7 @@ window.addEventListener('resize', () => {
         cargarDatos();
         cargarCuentasBackground();
         cargarLedger();
-        sincronizarComisionesServidor();
-        sincronizarCombosServidor();
-        sincronizarHistorialCatalogo_();
+        sincronizarConfigCatalogoServidor_();
       } else {
         try { localStorage.removeItem('app_key'); } catch(e){}
       }
