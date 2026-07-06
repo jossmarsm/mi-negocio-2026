@@ -365,6 +365,13 @@ body {
 .form-input:focus, .form-select:focus { border-color: var(--violet); box-shadow: 0 0 0 3px rgba(0,149,246,0.12); }
 .form-input[readonly] { background: rgba(255,255,255,0.02); color: var(--text2); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.comp-dropzone {
+  border: 1.5px dashed var(--border-strong); border-radius: var(--radius-sm); padding: 16px 12px;
+  text-align: center; transition: all 0.15s var(--ease); background: var(--surface);
+}
+.comp-dropzone.dragover { border-color: var(--violet); background: rgba(0,149,246,0.08); }
+.comp-dropzone .comp-dropzone-hint { font-size: 12px; color: var(--text2); margin-top: 6px; pointer-events: none; }
+.comp-dropzone .form-input { border: none; padding: 0; background: transparent; }
 
 .btn-primary {
   width: 100%; padding: 13px; border-radius: var(--radius-sm);
@@ -617,6 +624,16 @@ body {
   .form-row { grid-template-columns: 1fr; }
   .detalle-grid { grid-template-columns: 1fr; }
   .nav-tabs { top: calc(57px + env(safe-area-inset-top, 0px)); }
+  /* Tap targets más grandes en móvil (mínimo táctil recomendado ~44px);
+     en desktop se quedan en su tamaño compacto original. */
+  .modal-close { width: 44px; height: 44px; }
+  .wa-btn { width: 40px; height: 40px; }
+  /* Con 7 pestañas no todas caben en pantallas angostas y quedan ocultas a la
+     derecha sin ningún indicio — este degradado avisa que hay más scroll. */
+  .nav-tabs::after {
+    content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 28px;
+    background: linear-gradient(to right, transparent, var(--bg)); pointer-events: none;
+  }
 }
 
 /* ===== Login ===== */
@@ -829,7 +846,7 @@ body {
       </div>
       <div class="form-group">
         <label class="form-label">Contacto (tel, 10 dígitos)</label>
-        <input class="form-input" id="n-contacto" placeholder="Ej. 9981234567" maxlength="10">
+        <input class="form-input" type="tel" id="n-contacto" placeholder="Ej. 9981234567" maxlength="10">
       </div>
     </div>
     <div class="form-row">
@@ -909,7 +926,7 @@ body {
     </div>
     <div class="form-group">
       <label class="form-label">Contacto (tel, 10 dígitos)</label>
-      <input class="form-input" id="e-contacto" placeholder="Teléfono" maxlength="10">
+      <input class="form-input" type="tel" id="e-contacto" placeholder="Teléfono" maxlength="10">
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -1127,7 +1144,10 @@ body {
     <div style="font-size:13px;color:var(--text2);margin-bottom:14px;">Cliente: <strong id="comp-cliente-nombre" style="color:var(--text);">—</strong></div>
     <div class="form-group">
       <label class="form-label">Foto o PDF del comprobante *</label>
-      <input class="form-input" type="file" id="comp-archivo" accept="image/*,.pdf" capture="environment" onchange="previsualizarComprobante(this)">
+      <div class="comp-dropzone" id="comp-dropzone" onclick="document.getElementById('comp-archivo').click()">
+        <input class="form-input" type="file" id="comp-archivo" accept="image/*,.pdf" onchange="previsualizarComprobante(this)" onclick="event.stopPropagation()">
+        <div class="comp-dropzone-hint">o arrastra aquí la imagen/PDF</div>
+      </div>
       <div id="comp-preview"></div>
     </div>
     <div class="form-group">
@@ -1336,7 +1356,14 @@ function forzarRelogin_() {
   APP_KEY = '';
   const ov = document.getElementById('login-overlay');
   if (ov) ov.style.display = 'flex';
-  toast('Tu sesión expiró. Vuelve a entrar.', 'error', '🔒');
+  // El overlay de login se pone ENCIMA sin tocar el DOM de abajo: si había un
+  // formulario o modal abierto (p. ej. a mitad de subir un comprobante), lo
+  // que ya se escribió sigue ahí después de volver a entrar. Se avisa para
+  // que el usuario no piense que perdió su trabajo y cierre todo de nervios.
+  const habiaModalAbierto = !!document.querySelector('.modal-overlay.open');
+  toast(habiaModalAbierto
+    ? 'Tu sesión expiró. Vuelve a entrar — lo que tenías abierto sigue ahí.'
+    : 'Tu sesión expiró. Vuelve a entrar.', 'error', '🔒');
 }
 
 const COLORES = [
@@ -3718,6 +3745,26 @@ function previsualizarComprobante(input) {
   }
 }
 
+// Arrastrar y soltar sobre el modal de comprobante: reusa el mismo input file
+// (vía DataTransfer) para no duplicar la lógica de previsualización/subida.
+(function initComprobanteDropzone_() {
+  const zona = document.getElementById('comp-dropzone');
+  const input = document.getElementById('comp-archivo');
+  if (!zona || !input) return;
+  ['dragenter', 'dragover'].forEach(evt => {
+    zona.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); zona.classList.add('dragover'); });
+  });
+  ['dragleave', 'drop'].forEach(evt => {
+    zona.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); zona.classList.remove('dragover'); });
+  });
+  zona.addEventListener('drop', e => {
+    const archivos = e.dataTransfer.files;
+    if (!archivos || !archivos.length) return;
+    input.files = archivos;
+    previsualizarComprobante(input);
+  });
+})();
+
 // Redimensiona una foto a máx. 1400px de ancho y la comprime a JPEG — una
 // foto de cámara puede pesar varios MB; esto la baja a unos cientos de KB
 // para que la subida sea rápida incluso con datos móviles. Un PDF se manda
@@ -3853,7 +3900,7 @@ function guardarVentaUnica() {
         setTimeout(()=>cerrarModal('modal-venta-unica'), 1000);
       } else throw new Error(res.message);
     })
-    .catch(()=>{ status.innerHTML='<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>'; btn.disabled=false; btn.textContent='Registrar venta única'; });
+    .catch(()=>{ status.innerHTML='<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>'; toast('No se pudo registrar la venta única', 'error'); btn.disabled=false; btn.textContent='Registrar venta única'; });
 }
 
 function abrirModalPago(vendedor, pendiente) {
@@ -3886,7 +3933,7 @@ function guardarPago() {
         setTimeout(()=>cerrarModal('modal-pago'), 1000);
       } else throw new Error(res.message);
     })
-    .catch(()=>{ status.innerHTML='<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>'; btn.disabled=false; btn.textContent='Registrar pago'; });
+    .catch(()=>{ status.innerHTML='<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>'; toast('No se pudo registrar el pago', 'error'); btn.disabled=false; btn.textContent='Registrar pago'; });
 }
 
 function abrirModalAjuste(vendedor) {
@@ -3919,7 +3966,7 @@ function guardarAjuste() {
         setTimeout(()=>cerrarModal('modal-ajuste'), 1000);
       } else throw new Error(res.message);
     })
-    .catch(err=>{ status.innerHTML='<div class="error-msg">⚠️ '+(err.message||'Error al guardar. Intenta de nuevo.')+'</div>'; btn.disabled=false; btn.textContent='Aplicar ajuste'; });
+    .catch(err=>{ status.innerHTML='<div class="error-msg">⚠️ '+(err.message||'Error al guardar. Intenta de nuevo.')+'</div>'; toast('No se pudo aplicar el ajuste', 'error'); btn.disabled=false; btn.textContent='Aplicar ajuste'; });
 }
 
 function renderConfig() {
@@ -4101,7 +4148,7 @@ function renderConfig() {
           </select>
           <div style="font-size:11px;color:var(--text3);margin-top:5px;">Si es de varios meses, el vencimiento (ej. 90 días) y el reparto de ganancia por mes se ajustan solos. El precio/ganancia que pongas arriba son los del paquete completo.</div>
         </div>
-        <button class="btn-primary" onclick="guardarNuevoCombo()">Guardar combo</button>
+        <button class="btn-primary" id="btn-guardar-combo" onclick="guardarNuevoCombo()">Guardar combo</button>
         <div id="ncb-status"></div>
       </div>
     </div>
@@ -4199,7 +4246,13 @@ function guardarConfigLocal() {
   try {
     localStorage.setItem('config_comisiones', JSON.stringify(COMISIONES));
     localStorage.setItem('config_paquetes', JSON.stringify(PAQUETES_GANANCIA));
-  } catch(e) {}
+  } catch(e) {
+    // No es silencioso a propósito: el caller ya avisa si el servidor
+    // sincronizó bien, pero si el caché LOCAL falla (modo incógnito, cuota
+    // llena) el usuario debe saberlo — sin esto, un refresh podría mostrarle
+    // valores viejos aunque "todo se vio bien" en el momento.
+    toast('No se pudo guardar la copia local de la configuración', 'error');
+  }
 }
 function cargarConfigLocal() {
   try {
@@ -4308,6 +4361,10 @@ function guardarNuevoCombo() {
   PAQUETES_GANANCIA[nombre] = {precio, gananciaAmigo:amigo, gananciaNeta:neta, meses, plataformas:plataformasSeleccionadas};
   guardarConfigLocal();
 
+  const btn = document.getElementById('btn-guardar-combo');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  status.innerHTML = '';
+
   postDatos({accion:'agregarCombo', key:APP_KEY, nombre, precio, gananciaAmigo:amigo, gananciaNeta:neta, meses, plataformas:plataformasSeleccionadas.join(',')})
     .then(res=>{
       status.innerHTML = '<div class="success-box"><p>✅ Combo guardado y disponible para usar</p></div>';
@@ -4320,8 +4377,14 @@ function guardarNuevoCombo() {
       document.querySelectorAll('.ncb-plat-check').forEach(c=>c.checked=false);
     })
     .catch(()=>{
-      // Aunque falle el guardado remoto, ya quedó disponible localmente para esta sesión
-      status.innerHTML = '<div class="success-box"><p>✅ Combo disponible en esta sesión (no se pudo sincronizar con Sheets)</p></div>';
+      // Aunque queda disponible localmente para esta sesión, NO se guardó en
+      // Sheets — otros vendedores nunca lo verán. Debe leerse como error, no
+      // como éxito, para que el admin sepa que tiene que reintentar.
+      status.innerHTML = '<div class="error-msg">⚠️ No se pudo guardar en Sheets. Quedó disponible solo en este dispositivo por ahora — vuelve a intentar cuando tengas conexión.</div>';
+      toast('El combo no se sincronizó con Sheets', 'error');
+    })
+    .finally(()=>{
+      btn.disabled = false; btn.textContent = 'Guardar combo';
     });
 }
 
@@ -4449,9 +4512,11 @@ function calcularRenovacionRenovar() {
     gananciaNueva = montoBaseCliente_(c);
   } else {
     gananciaNueva = calcularGananciaParaCliente_(paqueteParaGanancia, c.vendedor);
-    // Si el combo no está en el catálogo (nombre viejo) y se mantiene el mismo,
-    // usa la ganancia que ya tiene guardada el cliente — nunca mostrar $0.
-    if (gananciaNueva === 0 && !selVal) gananciaNueva = montoBaseCliente_(c);
+    // Si el combo (el que se mantiene, o el elegido para upgrade) no está en
+    // el catálogo local — nombre viejo, o catálogo desactualizado en esta
+    // sesión — usa la ganancia que ya tiene guardada el cliente. Nunca
+    // mostrar/mandar $0 por un combo que simplemente no se encontró.
+    if (!buscarDatosCombo_(paqueteParaGanancia)) gananciaNueva = montoBaseCliente_(c);
   }
   document.getElementById('renovar-ganancia-nueva').textContent = '$'+gananciaNueva.toFixed(2);
   const nota = document.getElementById('renovar-protegido-nota');
@@ -4510,9 +4575,10 @@ function guardarRenovacion() {
     precioFinal = c.precio;
   } else {
     gananciaNueva = calcularGananciaParaCliente_(paqueteCiclo, c.vendedor);
-    // Mismo fallback que en la vista previa: si el combo viejo no está en el
-    // catálogo y se mantiene, conserva la ganancia ya guardada del cliente.
-    if (gananciaNueva === 0 && !paqueteNuevo) gananciaNueva = montoBaseCliente_(c);
+    // Mismo fallback que en la vista previa: si el combo (el que se mantiene,
+    // o el elegido para upgrade) no está en el catálogo local, conserva la
+    // ganancia ya guardada del cliente en vez de mandar $0.
+    if (!buscarDatosCombo_(paqueteCiclo)) gananciaNueva = montoBaseCliente_(c);
     precioFinal = precioNuevo; // vacío = mantener el mismo
   }
 
