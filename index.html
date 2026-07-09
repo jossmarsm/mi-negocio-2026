@@ -4604,6 +4604,13 @@ function guardarNuevaCuenta() {
     status.innerHTML = '<div class="error-msg">⚠️ Nombre y correo son obligatorios.</div>';
     return;
   }
+  // El nombre identifica a la cuenta en TODO el sistema (slots, edición,
+  // borrado): repetirlo hace que todo le atine a la primera coincidencia.
+  // El servidor también lo rechaza; esto es solo para avisar sin esperar.
+  if (cuentasCargadas && todasCuentas.some(c => (c.nombre||'').trim().toLowerCase() === nombre.toLowerCase())) {
+    status.innerHTML = `<div class="error-msg">⚠️ Ya existe una cuenta llamada "${esc(nombre)}". Ponle otro nombre — por ejemplo "${esc(nombre)} B".</div>`;
+    return;
+  }
 
   const datos = {
     accion: 'nuevaCuenta', key:APP_KEY,
@@ -4625,8 +4632,10 @@ function guardarNuevaCuenta() {
         cargarCuentasBackground();
       } else throw new Error(res.message);
     })
-    .catch(() => {
-      status.innerHTML = '<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>';
+    .catch(err => {
+      // El servidor puede rechazar con un motivo útil (ej. nombre duplicado)
+      // — se muestra tal cual en vez de un "error" genérico.
+      status.innerHTML = `<div class="error-msg">⚠️ ${esc(err.message || 'Error al guardar. Intenta de nuevo.')}</div>`;
     });
 }
 
