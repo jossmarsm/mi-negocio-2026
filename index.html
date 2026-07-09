@@ -1375,6 +1375,31 @@ const COLORES = [
 const COMISIONES_DEFAULT = { ximenita:100, saito:100 };
 let COMISIONES = JSON.parse(JSON.stringify(COMISIONES_DEFAULT));
 
+// La lista de vendedores YA NO está quemada en el HTML: sale de las llaves de
+// COMISIONES (que el servidor llena desde config_comisiones al entrar). Un
+// vendedor dado de alta desde Configuración aparece aquí solo.
+function vendedoresEquipo_() { return Object.keys(COMISIONES); }
+
+// Nombre bonito de un vendedor: 'ximenita' es especial por historia; los
+// demás se capitalizan tal cual ('saito' → 'Saito', 'maria' → 'Maria').
+function nombreVendedorUI_(v) {
+  return v === 'ximenita' ? 'Xime' : (v === 'yo' || v === 'YO' ? 'Tú' : v.charAt(0).toUpperCase() + v.slice(1));
+}
+
+// Rellena los 3 selects de vendedor (nuevo cliente, editar, venta única) con
+// el equipo actual, conservando la selección que ya tuviera cada uno.
+function poblarSelectsVendedores_() {
+  const vends = vendedoresEquipo_();
+  [['n-vendedor','YO','YO'], ['e-vendedor','YO','YO'], ['vu-vendedor','yo','Mía (100% para mí)']].forEach(([id, yoVal, yoLabel]) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const actual = sel.value;
+    sel.innerHTML = `<option value="${yoVal}">${yoLabel}</option>` +
+      vends.map(v => `<option value="${esc(v)}">${esc(nombreVendedorUI_(v))}</option>`).join('');
+    if (actual && Array.from(sel.options).some(o => o.value === actual)) sel.value = actual;
+  });
+}
+
 const PAQUETES_GANANCIA_DEFAULT = {
   'Netflix 4K':{precio:90,gananciaAmigo:20,gananciaNeta:10,plataformas:['NETFLIX']},
   'Spotify Prem.':{precio:60,gananciaAmigo:25,gananciaNeta:17,plataformas:['SPOTIFY']},
@@ -1872,7 +1897,7 @@ function calcularNotificaciones() {
   if (ledgerCargado) {
     if (MI_ROL === 'admin') {
       let deuda = 0;
-      ['ximenita','saito'].forEach(v => { const s = saldoLedger_(v).saldo; if (s > 0.01) deuda += s; });
+      vendedoresEquipo_().forEach(v => { const s = saldoLedger_(v).saldo; if (s > 0.01) deuda += s; });
       if (deuda > 0.01) out.push({ sev:'azul', icon:'💰',
         titulo:`Debes $${deuda.toLocaleString('es-MX',{maximumFractionDigits:2})} a tus vendedores`,
         detalle:'Comisiones pendientes por pagar.', accion:()=>irASeccion('ganancias') });
@@ -1916,13 +1941,31 @@ function marcarCatalogoVisto_() {
   actualizarNotificaciones();
 }
 
+// "Firma" del estado actual de las notificaciones: los títulos concatenados.
+// Como los títulos llevan los números adentro ("3 clientes vencidos"), si
+// algo cambia — un vencido más, un cambio de catálogo nuevo — la firma cambia
+// y el badge vuelve a aparecer solo. Así "cerrar el panel" apaga la campana
+// sin el riesgo de silenciar alertas nuevas que lleguen después.
+function firmaNotifs_(notifs) {
+  return (notifs || calcularNotificaciones()).map(nf => nf.titulo).join('|');
+}
+function marcarNotifsVistas_() {
+  try { localStorage.setItem('notifs_vistas_firma', firmaNotifs_()); } catch(e) {}
+  actualizarNotificaciones();
+}
+
 // Actualiza solo el número rojo de la campana (se llama seguido, es barato).
+// El badge solo se muestra si hay algo NUEVO desde la última vez que se abrió
+// y cerró el panel — las notificaciones en sí siguen todas dentro del panel.
 function actualizarNotificaciones() {
   const badge = document.getElementById('notif-badge');
   const btn = document.getElementById('btn-notif');
   if (!badge) return;
-  const n = calcularNotificaciones().length;
-  if (n > 0) { badge.textContent = n; badge.style.display = 'flex'; if (btn) btn.classList.add('tiene-alertas'); }
+  const notifs = calcularNotificaciones();
+  let firmaVista = '';
+  try { firmaVista = localStorage.getItem('notifs_vistas_firma') || ''; } catch(e) {}
+  const hayNuevas = notifs.length > 0 && firmaNotifs_(notifs) !== firmaVista;
+  if (hayNuevas) { badge.textContent = notifs.length; badge.style.display = 'flex'; if (btn) btn.classList.add('tiene-alertas'); }
   else { badge.style.display = 'none'; if (btn) btn.classList.remove('tiene-alertas'); }
 }
 
@@ -2530,7 +2573,12 @@ function abrirModalNuevo() {
   nuevoClienteOpId = nuevoOpId();
   calcularRenovacion(); generarID();
 }
-function cerrarModal(id) { document.getElementById(id).classList.remove('open'); }
+function cerrarModal(id) {
+  document.getElementById(id).classList.remove('open');
+  // Cerrar el panel de notificaciones cuenta como "ya las vi": se apaga la
+  // campana hasta que aparezca algo nuevo (ver firmaNotifs_).
+  if (id === 'modal-notif') marcarNotifsVistas_();
+}
 
 function generarID() {
   const nombre=document.getElementById('n-cliente').value.trim();
@@ -2584,6 +2632,10 @@ function cargarCuentasDisponibles(paquete, targetId, selectClass, cuentasActuale
   }
 
   let html = '';
+  // Copia consumible de las cuentas ya asignadas: si el combo lleva la misma
+  // plataforma 2 veces (dos selects de SPOTIFY), cada select preselecciona
+  // una cuenta DISTINTA de las del cliente, en vez de las dos la misma.
+  const refsRestantes = [...cuentasActuales];
   plataformas.forEach(plat => {
     const cuentasPlat = todasCuentas.filter(c => c.plataforma === plat).map(cuenta => {
       // "Ya asignada a este cliente" si su NOMBRE (lo nuevo) o su correo (lo viejo)
@@ -2605,7 +2657,8 @@ function cargarCuentasDisponibles(paquete, targetId, selectClass, cuentasActuale
     } else {
       // El valor que se guarda es el NOMBRE de la cuenta (único), no el correo —
       // así dos cuentas con el mismo correo (Disney/HBO) nunca se confunden.
-      const refPresel = cuentasActuales.find(ref => cuentasPlat.some(c => c.nombre === ref || c.correo === ref)) || '';
+      const refPresel = refsRestantes.find(ref => cuentasPlat.some(c => c.nombre === ref || c.correo === ref)) || '';
+      if (refPresel) refsRestantes.splice(refsRestantes.indexOf(refPresel), 1);
       html += `<select class="form-select ${selectClass}" data-plat="${plat}">
         <option value="">Selecciona cuenta de ${plat}...</option>
         ${cuentasPlat.map(c => `<option value="${esc(c.nombre)}" ${(c.nombre===refPresel||c.correo===refPresel)?'selected':''}>${esc(c.nombre)} — ${esc(c.correo)} (${c.libres} libre${c.libres!==1?'s':''})${c.yaAsignadaAqui?' · ya asignada':''}</option>`).join('')}
@@ -2641,7 +2694,9 @@ function cargarCatalogo() {
 }
 
 function disponibilidadCombo(nombrePaquete) {
-  const plataformas = detectarPlataformas(nombrePaquete);
+  // Lista ÚNICA: si el combo lleva la misma plataforma 2 veces (ej. "2
+  // Spotify"), sus slots libres no deben contarse doble.
+  const plataformas = [...new Set(detectarPlataformas(nombrePaquete))];
   let totalLibres = 0;
   plataformas.forEach(plat => {
     todasCuentas.filter(c => c.plataforma === plat).forEach(cuenta => {
@@ -2693,30 +2748,41 @@ function renderCatalogo() {
   const esAdmin = MI_ROL === 'admin';
   const miPct = esAdmin ? 100 : (COMISIONES[MI_VENDEDOR] !== undefined ? COMISIONES[MI_VENDEDOR] : 100);
 
-  // ===== Panel "Novedades del catálogo" — cambios de los últimos 30 días =====
+  // ===== Panel "Novedades del catálogo" — cambios de los últimos 7 días =====
   // No depende de la búsqueda ni del filtro: siempre visible arriba para que
-  // nadie se pierda un cambio de precio o comisión.
+  // nadie se pierda un cambio de precio o comisión. Es temporal a propósito:
+  // pasada una semana, el cambio ya es "el precio normal" y el panel se limpia
+  // solo. Los cambios de las últimas 48h llevan chip 🆕 para resaltar qué es
+  // lo más nuevo cuando hay varios cambios en la misma semana; si un mismo
+  // combo cambió varias veces, solo el cambio más reciente se muestra a todo
+  // color y los anteriores quedan atenuados como historial.
   const novedadesEl = document.getElementById('catalogo-novedades');
   if (novedadesEl) {
     const hoy = new Date();
     const cambiosRecientes = (todosCambiosCatalogo||[])
       .map(h => ({h, f: parseFecha(h.fecha)}))
-      .filter(x => x.f && (hoy - x.f) <= 1000*60*60*24*30)
+      .filter(x => x.f && (hoy - x.f) <= 1000*60*60*24*7)
       .sort((a,b) => b.f - a.f)
       .slice(0, 8)
-      .map(x => ({h: x.h, frase: fraseCambioCombo_(x.h, esAdmin)}))
+      .map(x => ({h: x.h, f: x.f, frase: fraseCambioCombo_(x.h, esAdmin)}))
       .filter(x => x.frase);
+    const combosYaVistos = {};
     // Estilo tipo banner (mismo lenguaje que la racha de clientes nuevos):
     // borde y fondo azules, para que resalte de las tarjetas normales de abajo.
     novedadesEl.innerHTML = !cambiosRecientes.length ? '' : `
       <div style="background:linear-gradient(135deg,rgba(0,149,246,0.14),rgba(0,149,246,0.04));border:1px solid rgba(0,149,246,0.35);border-radius:var(--radius-md);padding:14px 16px;margin-bottom:14px;">
-        <div style="font-size:12px;font-weight:700;color:var(--violet2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">🔔 Novedades del catálogo</div>
+        <div style="font-size:12px;font-weight:700;color:var(--violet2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">🔔 Novedades del catálogo <span style="font-weight:600;color:var(--text3);text-transform:none;letter-spacing:0;">· últimos 7 días</span></div>
         <div style="display:flex;flex-direction:column;gap:8px;">
-          ${cambiosRecientes.map(({h, frase}) => `<div style="font-size:12.5px;line-height:1.5;">
+          ${cambiosRecientes.map(({h, f, frase}) => {
+            const esNuevo = (hoy - f) <= 1000*60*60*24*2;
+            const esCambioViejoDelMismo = combosYaVistos[h.nombre];
+            combosYaVistos[h.nombre] = true;
+            return `<div style="font-size:12.5px;line-height:1.5;${esCambioViejoDelMismo?'opacity:0.55;':''}">
+            ${esNuevo && !esCambioViejoDelMismo ? '<span style="font-size:10px;font-weight:800;color:var(--green);background:var(--green-bg);padding:2px 7px;border-radius:99px;margin-right:4px;">🆕 NUEVO</span>' : ''}
             <span style="font-weight:700;">${esc(h.nombre)}</span>
             <span style="color:var(--text2);"> — ${frase}</span>
-            <span style="color:var(--text3);"> · ${esc(h.fecha)}</span>
-          </div>`).join('')}
+            <span style="color:var(--text3);"> · ${esc(h.fecha)}${esCambioViejoDelMismo?' (cambio anterior)':''}</span>
+          </div>`;}).join('')}
         </div>
       </div>`;
   }
@@ -2745,13 +2811,15 @@ function renderCatalogo() {
     return;
   }
 
-  const hace14dias = new Date(); hace14dias.setDate(hace14dias.getDate()-14);
+  // Mismo criterio temporal que el panel de novedades: pasada 1 semana, el
+  // cambio deja de marcarse como "ACTUALIZADO" (ya es el precio normal).
+  const hace7dias = new Date(); hace7dias.setDate(hace7dias.getDate()-7);
   cont.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">` + combos.map(([nombre, d]) => {
     const libres = disponibilidadCombo(nombre);
     const sinStock = libres <= 0;
     const miGanancia = esAdmin ? d.gananciaNeta : (d.gananciaAmigo * (miPct/100));
     const plats = detectarPlataformas(nombre);
-    const cambioReciente = (todosCambiosCatalogo||[]).some(h => h.nombre === nombre && parseFecha(h.fecha) && parseFecha(h.fecha) >= hace14dias);
+    const cambioReciente = (todosCambiosCatalogo||[]).some(h => h.nombre === nombre && parseFecha(h.fecha) && parseFecha(h.fecha) >= hace7dias);
     return `<div class="cuenta-card" style="padding:14px 16px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">
         <div style="flex:1;">
@@ -2789,7 +2857,11 @@ function detectarPlataformas(paquete) {
   // (ej. "Home Theater 2" no dice "spotify" ni "vix" en ningún lado).
   const datosCombo = PAQUETES_GANANCIA[paquete];
   if (datosCombo && Array.isArray(datosCombo.plataformas) && datosCombo.plataformas.length) {
-    return [...new Set(datosCombo.plataformas)];
+    // OJO: SIN deduplicar — un combo puede llevar la misma plataforma dos
+    // veces a propósito (ej. "2 Spotify"), y cada repetición significa un
+    // slot/cuenta más que asignar. Quien necesite la lista única (chips de
+    // filtro, disponibilidad) hace su propio new Set.
+    return datosCombo.plataformas.slice();
   }
 
   // Respaldo: combos antiguos creados antes de este fix, sin el campo
@@ -3403,7 +3475,7 @@ function montoBaseCliente_(c) {
 }
 
 function renderGanancias() {
-  const vendedores = MI_ROL==='admin' ? ['ximenita','saito'] : [MI_VENDEDOR];
+  const vendedores = MI_ROL==='admin' ? vendedoresEquipo_() : [MI_VENDEDOR];
   const resumen = {};
   // El DINERO de cada vendedor sale del libro (todasComisiones), NO de re-sumar
   // clientes activos. Vencer/archivar ya no toca un peso. De los clientes solo
@@ -3469,7 +3541,7 @@ function renderGanancias() {
   const ringOffset = ringC - (pctPagado/100)*ringC;
   const todoAlCorriente = pendienteTotal <= 0.001;
 
-  const heroLabel = MI_ROL==='admin' ? (vendedores.length>1 ? 'Pendiente por pagar a tu equipo' : `Pendiente por pagar a ${vendedores[0]==='ximenita'?'Xime':vendedores[0]}`) : 'Tu pendiente por cobrar';
+  const heroLabel = MI_ROL==='admin' ? (vendedores.length>1 ? 'Pendiente por pagar a tu equipo' : `Pendiente por pagar a ${nombreVendedorUI_(vendedores[0])}`) : 'Tu pendiente por cobrar';
   const heroSub = todoAlCorriente ? 'Al corriente — nada pendiente ✓' : `${Math.round(pctPagado)}% de lo generado ya está pagado`;
 
   // ===== Resumen del mes en curso =====
@@ -3580,7 +3652,7 @@ function vendorCardHTML(v, r, hist) {
   const sobrepago = pend < -0.001; // le pagaste de más → saldo a favor
   const histId = 'hist-'+v, vuId = 'vu-hist-'+v;
   const vu = todasVentasUnicas.filter(x=>(x.vendedor||'').toLowerCase()===v);
-  const nombreVisible = v==='ximenita' ? 'Xime' : v;
+  const nombreVisible = nombreVendedorUI_(v);
 
   const metaParts = [`${r.clientes} cliente${r.clientes!==1?'s':''} activo${r.clientes!==1?'s':''}`, `${pct}% comisión`];
   if (r.ventasUnicas>0) metaParts.push(`${r.ventasUnicas} venta${r.ventasUnicas!==1?'s':''} única${r.ventasUnicas!==1?'s':''} este mes`);
@@ -3872,7 +3944,7 @@ function previsualizarVentaUnica() {
 }
 
 function abrirModalVentaUnica(vendedorPreseleccionado) {
-  document.getElementById('vu-vendedor').value = vendedorPreseleccionado || 'saito';
+  document.getElementById('vu-vendedor').value = vendedorPreseleccionado || vendedoresEquipo_()[0] || 'yo';
   document.getElementById('vu-monto').value = '';
   document.getElementById('vu-notas').value = '';
   document.getElementById('vu-preview').style.display = 'none';
@@ -3905,7 +3977,7 @@ function guardarVentaUnica() {
 
 function abrirModalPago(vendedor, pendiente) {
   document.getElementById('pago-vendedor').value = vendedor;
-  document.getElementById('pago-titulo').textContent = 'Pagar a ' + (vendedor==='ximenita'?'Xime':vendedor);
+  document.getElementById('pago-titulo').textContent = 'Pagar a ' + nombreVendedorUI_(vendedor);
   document.getElementById('pago-monto').value = pendiente>0 ? pendiente : '';
   document.getElementById('pago-notas').value = '';
   document.getElementById('pago-status').innerHTML = '';
@@ -3938,7 +4010,7 @@ function guardarPago() {
 
 function abrirModalAjuste(vendedor) {
   document.getElementById('aj-vendedor').value = vendedor;
-  document.getElementById('aj-vendedor-nombre').textContent = vendedor==='ximenita' ? 'Xime' : vendedor;
+  document.getElementById('aj-vendedor-nombre').textContent = nombreVendedorUI_(vendedor);
   document.getElementById('aj-monto').value = '';
   document.getElementById('aj-nota').value = '';
   document.getElementById('aj-status').innerHTML = '';
@@ -3971,10 +4043,9 @@ function guardarAjuste() {
 
 function renderConfig() {
   const paquetes = Object.entries(PAQUETES_GANANCIA);
-  const vendedores = [
-    {nombre:'Xime', key:'ximenita'},
-    {nombre:'Saito', key:'saito'},
-  ];
+  // Equipo dinámico: cada vendedor con % en config_comisiones (los dados de
+  // alta desde la app incluidos) aparece aquí para ajustar su comisión.
+  const vendedores = vendedoresEquipo_().map(v => ({ nombre: nombreVendedorUI_(v), key: v }));
 
   document.getElementById('config-content').innerHTML=`
     <div style="font-size:16px;font-weight:700;margin-bottom:16px;font-family:'Space Grotesk';">⚙️ Configuración</div>
@@ -4052,6 +4123,28 @@ function renderConfig() {
       <div style="margin-top:12px;padding:11px 14px;background:var(--blue-bg);border-radius:12px;font-size:12px;color:var(--blue);">
         💡 100% significa que el vendedor se lleva toda la Ganancia Amigo. 50% significa que se dividen, y tú te quedas la diferencia.
       </div>
+
+      <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px;">➕ Agregar vendedor nuevo</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.5;">Crea su usuario y clave de acceso — con eso ya puede entrar a la app y ver SUS clientes y comisiones. Si escribes un usuario que ya existe, solo se le cambia la clave (útil si alguien la olvidó).</div>
+        <div id="nv-status"></div>
+        <div class="form-group">
+          <label class="form-label">Usuario (para entrar a la app)</label>
+          <input class="form-input" id="nv-usuario" placeholder="ej. maria" autocomplete="off" style="text-transform:lowercase;">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Nombre visible</label>
+            <input class="form-input" id="nv-nombre" placeholder="ej. María" autocomplete="off">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Clave (mín. 8)</label>
+            <input class="form-input" id="nv-clave" type="text" placeholder="clave segura" autocomplete="off">
+          </div>
+        </div>
+        <button class="btn-primary" id="btn-nuevo-vendedor" onclick="guardarNuevoVendedor()">Guardar vendedor</button>
+        <div id="equipo-lista" style="margin-top:16px;"><div style="font-size:12px;color:var(--text3);">Cargando equipo…</div></div>
+      </div>
     </div>
 
     <div id="config-nueva-cuenta" style="display:none;">
@@ -4118,10 +4211,14 @@ function renderConfig() {
           <div style="display:flex;flex-wrap:wrap;gap:8px;" id="ncb-plataformas">
             ${Object.keys(PLAT_ICONS).filter(p=>p!=='YOUTUBE').map(plat => `
               <label style="display:flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:13px;cursor:pointer;">
-                <input type="checkbox" class="ncb-plat-check" value="${plat}" style="width:16px;height:16px;accent-color:var(--violet);">
+                <input type="checkbox" class="ncb-plat-check" value="${plat}" style="width:16px;height:16px;accent-color:var(--violet);" onchange="const q=this.parentElement.querySelector('.ncb-plat-qty'); q.style.display=this.checked?'inline-block':'none'; if(!this.checked) q.value='1';">
                 ${PLAT_ICONS[plat]} ${plat}
+                <select class="ncb-plat-qty" data-plat="${plat}" onclick="event.stopPropagation()" style="display:none;background:var(--surface-solid);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:2px 4px;font-size:12px;" title="¿Cuántas cuentas de esta plataforma lleva el combo?">
+                  <option value="1">×1</option><option value="2">×2</option><option value="3">×3</option>
+                </select>
               </label>`).join('')}
           </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:6px;">💡 Si el combo lleva la misma plataforma más de una vez (ej. "2 Spotify"), márcala y elige ×2 — al vender ese combo se pedirán dos cuentas de esa plataforma.</div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -4174,7 +4271,9 @@ function showConfigTab(tab, btn) {
   document.querySelectorAll('#config-paquetes,#config-vendedores,#config-nueva-cuenta,#config-nuevo-combo,#config-datos').forEach(el => el.style.display='none');
   document.getElementById('config-'+tab).style.display='block';
   document.querySelectorAll('#config-tabs .f-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
+  if (btn) btn.classList.add('active');
+  // La lista del equipo se pide hasta que se abre esta pestaña (carga perezosa).
+  if (tab === 'vendedores') cargarEquipo_();
 }
 
 // Congela precio/ganancia de TODOS los clientes activos de HOY hasta la
@@ -4235,11 +4334,80 @@ function actualizarComision(vendedorKey) {
   const pct = isNaN(val) ? 100 : Math.max(0, Math.min(100, val));
   COMISIONES[vendedorKey] = pct;
   guardarConfigLocal();
-  toast('Comisión de '+(vendedorKey==='ximenita'?'Xime':vendedorKey)+' actualizada a '+pct+'%');
+  toast('Comisión de '+nombreVendedorUI_(vendedorKey)+' actualizada a '+pct+'%');
   // Persistir en el backend (hoja config_comisiones) para que el corte
   // mensual automático use el % correcto, no solo este navegador.
   postDatos({accion:'guardarComision',key:APP_KEY,vendedor:vendedorKey,porcentaje:pct})
     .catch(()=>{ toast('No se pudo sincronizar el % con el servidor', 'error'); });
+}
+
+// ===== Equipo: alta de vendedores desde la app (solo admin) =====
+let equipoUsuarios = null; // caché de listarUsuarios para no pedirla en cada render
+
+function cargarEquipo_() {
+  const cont = document.getElementById('equipo-lista');
+  if (!cont) return;
+  const pintar = () => {
+    if (!equipoUsuarios || !equipoUsuarios.length) { cont.innerHTML = ''; return; }
+    cont.innerHTML = `
+      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Equipo actual</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        ${equipoUsuarios.map(u => `
+          <div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:9px 12px;font-size:12.5px;">
+            <span>${u.rol==='admin'?'👑':'👤'}</span>
+            <span style="font-weight:700;">${esc(u.nombre)}</span>
+            <span style="color:var(--text3);">entra como <strong style="color:var(--text2);">${esc(u.usuario)}</strong></span>
+            ${u.rol==='vendedor' ? `<span style="margin-left:auto;color:var(--text3);font-size:11.5px;">comisión ${COMISIONES[u.vendedor]!==undefined?COMISIONES[u.vendedor]:100}%</span>` : '<span style="margin-left:auto;color:var(--violet2);font-size:11px;font-weight:700;">ADMIN</span>'}
+          </div>`).join('')}
+      </div>`;
+  };
+  if (equipoUsuarios) { pintar(); return; }
+  postDatos({accion:'listarUsuarios', key:APP_KEY})
+    .then(res => { equipoUsuarios = res.usuarios || []; pintar(); })
+    .catch(() => { cont.innerHTML = '<div style="font-size:12px;color:var(--text3);">No se pudo cargar la lista del equipo.</div>'; });
+}
+
+function guardarNuevoVendedor() {
+  const usuario = document.getElementById('nv-usuario').value.toLowerCase().trim();
+  const nombre = document.getElementById('nv-nombre').value.trim();
+  const clave = document.getElementById('nv-clave').value;
+  const status = document.getElementById('nv-status');
+  if (!/^[a-z0-9._-]{3,20}$/.test(usuario)) {
+    status.innerHTML = '<div class="error-msg">⚠️ El usuario debe tener de 3 a 20 caracteres: minúsculas, números, punto o guion.</div>'; return;
+  }
+  if (clave.length < 8) {
+    status.innerHTML = '<div class="error-msg">⚠️ La clave debe tener al menos 8 caracteres.</div>'; return;
+  }
+  const btn = document.getElementById('btn-nuevo-vendedor');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+  status.innerHTML = '';
+  postDatos({accion:'agregarVendedor', key:APP_KEY, usuario, nombre, clave})
+    .then(res => {
+      if (res.status !== 'ok') throw new Error(res.message);
+      status.innerHTML = `<div class="success-box"><p>✅ ${res.esNuevo ? 'Vendedor creado' : 'Clave actualizada'} — usuario: <strong>${esc(res.usuario)}</strong></p></div>`;
+      toast(res.esNuevo ? 'Vendedor "'+res.nombre+'" agregado' : 'Clave de "'+res.nombre+'" actualizada', 'success', '👤');
+      document.getElementById('nv-usuario').value = '';
+      document.getElementById('nv-nombre').value = '';
+      document.getElementById('nv-clave').value = '';
+      if (res.esNuevo) {
+        // Refleja al nuevo vendedor en toda la app sin esperar otro login:
+        // % local, selects de formularios, y la propia lista de Configuración.
+        COMISIONES[res.vendedor] = 100;
+        guardarConfigLocal();
+        poblarSelectsVendedores_();
+        equipoUsuarios = null; // fuerza recarga de la lista
+        renderConfig();
+        showConfigTab('vendedores', Array.from(document.querySelectorAll('#config-tabs .f-btn')).find(b=>b.textContent.includes('Vendedores')));
+      } else {
+        equipoUsuarios = null;
+        cargarEquipo_();
+      }
+    })
+    .catch(err => {
+      status.innerHTML = `<div class="error-msg">⚠️ ${esc(err.message||'No se pudo guardar. Intenta de nuevo.')}</div>`;
+      toast('No se pudo guardar el vendedor', 'error');
+    })
+    .finally(() => { btn.disabled = false; btn.textContent = 'Guardar vendedor'; });
 }
 
 function guardarConfigLocal() {
@@ -4261,6 +4429,7 @@ function cargarConfigLocal() {
     const p = localStorage.getItem('config_paquetes');
     if (p) PAQUETES_GANANCIA = {...PAQUETES_GANANCIA_DEFAULT, ...JSON.parse(p)};
   } catch(e) {}
+  poblarSelectsVendedores_();
 }
 
 // Trae el % de comisión real desde el Sheet (fuente de verdad) y
@@ -4272,6 +4441,9 @@ function aplicarComisionesDesdeFilas_(filas) {
     const pct = parseFloat(f['porcentaje']);
     if (v && !isNaN(pct)) COMISIONES[v] = pct;
   });
+  // Con la lista fresca del servidor, los selects de vendedor se rearman —
+  // aquí es donde un vendedor recién dado de alta aparece en los formularios.
+  poblarSelectsVendedores_();
 }
 
 function aplicarCombosDesdeFilas_(filas) {
@@ -4338,7 +4510,14 @@ function guardarNuevoCombo() {
   const amigo = parseFloat(document.getElementById('ncb-amigo').value)||0;
   const neta = parseFloat(document.getElementById('ncb-neta').value)||0;
   const meses = Math.max(1, parseInt(document.getElementById('ncb-meses').value)||1);
-  const plataformasSeleccionadas = Array.from(document.querySelectorAll('.ncb-plat-check:checked')).map(c=>c.value);
+  // Cada plataforma marcada se repite según su "×N" (ej. Spotify ×2 →
+  // ['SPOTIFY','SPOTIFY']): cada repetición es una cuenta más que se pedirá
+  // al vender el combo.
+  const plataformasSeleccionadas = Array.from(document.querySelectorAll('.ncb-plat-check:checked')).flatMap(c => {
+    const qtySel = c.parentElement.querySelector('.ncb-plat-qty');
+    const qty = Math.max(1, Math.min(3, parseInt(qtySel && qtySel.value) || 1));
+    return Array(qty).fill(c.value);
+  });
   const status = document.getElementById('ncb-status');
 
   if (!nombre || precio<=0) {
@@ -4375,6 +4554,7 @@ function guardarNuevoCombo() {
       document.getElementById('ncb-neta').value='';
       document.getElementById('ncb-meses').value='1';
       document.querySelectorAll('.ncb-plat-check').forEach(c=>c.checked=false);
+      document.querySelectorAll('.ncb-plat-qty').forEach(q=>{ q.value='1'; q.style.display='none'; });
     })
     .catch(()=>{
       // Aunque queda disponible localmente para esta sesión, NO se guardó en
