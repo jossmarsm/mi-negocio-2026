@@ -701,6 +701,7 @@ body {
   <div class="nav-tab" id="tab-catalogo" onclick="mostrarSeccion('catalogo', this)">Catálogo</div>
   <div class="nav-tab" id="tab-ganancias" onclick="mostrarSeccion('ganancias', this)">Ganancias</div>
   <div class="nav-tab" id="tab-comprobantes" onclick="mostrarSeccion('comprobantes', this)">Comprobantes</div>
+  <div class="nav-tab" id="tab-historial" onclick="mostrarSeccion('historial', this)">Historial</div>
   <div class="nav-tab" id="tab-config" onclick="mostrarSeccion('config', this)">Configuración</div>
 </div>
 
@@ -818,6 +819,21 @@ body {
   </div>
 </div>
 
+<!-- SECCIÓN HISTORIAL DE ACTIVIDAD -->
+<div id="sec-historial" class="section-hidden">
+  <div class="content" style="padding-top:20px;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk';">Historial de movimientos</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-top:3px;" id="historial-sub">Quién hizo qué y cuándo — altas, renovaciones, pagos y cambios</div>
+    </div>
+    <div class="search-wrap" style="margin-bottom:16px;">
+      <span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+      <input type="text" id="buscar-actividad" placeholder="Buscar por cliente, vendedor o acción..." oninput="renderActividad()">
+    </div>
+    <div id="actividad-content"><div class="loading">Cargando historial...</div></div>
+  </div>
+</div>
+
 <!-- SECCIÓN CONFIGURACIÓN -->
 <div id="sec-config" class="section-hidden">
   <div class="content" style="padding-top:20px;">
@@ -832,8 +848,12 @@ body {
   <div class="modal">
     <div class="modal-header">
       <div class="modal-title">Nuevo cliente</div>
-      <button class="modal-close" onclick="cerrarModal('modal-nuevo')">✕</button>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="modal-close" title="Minimizar — el borrador se guarda y sigues después" onclick="minimizarModalNuevo()">—</button>
+        <button class="modal-close" onclick="cerrarModal('modal-nuevo')">✕</button>
+      </div>
     </div>
+    <div id="borrador-banner"></div>
     <div id="form-status"></div>
     <div class="form-group">
       <label class="form-label">Nombre del cliente *</label>
@@ -859,6 +879,29 @@ body {
       <div class="form-group">
         <label class="form-label">Precio</label>
         <input class="form-input" id="n-precio" readonly>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Duración de la venta</label>
+        <select class="form-select" id="n-meses" onchange="cambioMesesNuevo_()">
+          <option value="1">1 mes</option>
+          <option value="2">2 meses</option>
+          <option value="3">3 meses</option>
+          <option value="4">4 meses</option>
+          <option value="5">5 meses</option>
+          <option value="6">6 meses</option>
+          <option value="7">7 meses</option>
+          <option value="8">8 meses</option>
+          <option value="9">9 meses</option>
+          <option value="10">10 meses</option>
+          <option value="11">11 meses</option>
+          <option value="12">12 meses</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">&nbsp;</label>
+        <div style="font-size:11.5px;color:var(--text3);line-height:1.4;padding-top:8px;">Si vende más meses, precio y comisión se multiplican solos.</div>
       </div>
     </div>
     <div class="form-group" id="n-cuentas-container">
@@ -1099,10 +1142,33 @@ body {
     </div>
     <div class="form-group">
       <label class="form-label">Combo de este ciclo</label>
-      <select class="form-select" id="renovar-nuevo-paquete" onchange="calcularRenovacionRenovar()">
+      <select class="form-select" id="renovar-nuevo-paquete" onchange="cambioPaqueteRenovar_()">
         <option value="">Mantener el mismo combo</option>
       </select>
       <div style="font-size:11px;color:var(--text3);margin-top:4px;">Si el cliente mejora o cambia de combo, elígelo aquí y la comisión se calcula con el nuevo.</div>
+    </div>
+    <div class="form-group" id="renovar-cuentas-grupo" style="display:none;">
+      <label class="form-label">Cuentas del combo nuevo *</label>
+      <div id="renovar-cuentas-selects"></div>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">El upgrade no se guardará si falta una cuenta o ya no hay slots.</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Duración de este ciclo</label>
+      <select class="form-select" id="renovar-meses" onchange="calcularRenovacionRenovar()">
+        <option value="1">1 mes</option>
+        <option value="2">2 meses</option>
+        <option value="3">3 meses</option>
+        <option value="4">4 meses</option>
+        <option value="5">5 meses</option>
+        <option value="6">6 meses</option>
+        <option value="7">7 meses</option>
+        <option value="8">8 meses</option>
+        <option value="9">9 meses</option>
+        <option value="10">10 meses</option>
+        <option value="11">11 meses</option>
+        <option value="12">12 meses</option>
+      </select>
+      <div style="font-size:11px;color:var(--text3);margin-top:4px;">Si paga varios meses de un jalón, el precio y la comisión se multiplican solos.</div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -1401,29 +1467,29 @@ function poblarSelectsVendedores_() {
 }
 
 const PAQUETES_GANANCIA_DEFAULT = {
-  'Netflix 4K':{precio:90,gananciaAmigo:20,gananciaNeta:10,plataformas:['NETFLIX']},
-  'Spotify Prem.':{precio:60,gananciaAmigo:25,gananciaNeta:17,plataformas:['SPOTIFY']},
-  'YouTube Prem.':{precio:60,gananciaAmigo:25,gananciaNeta:11,plataformas:['YOUTUBE PREM']},
-  'Disney+ Prem.':{precio:70,gananciaAmigo:15,gananciaNeta:17.5,plataformas:['DISNEY']},
-  'HBO Max':{precio:70,gananciaAmigo:20,gananciaNeta:15,plataformas:['HBO']},
-  'Crunchyroll (1 disp)':{precio:55,gananciaAmigo:15,gananciaNeta:21.25,plataformas:['CRUNCHYROLL']},
-  'Combo anime (NF + Crunchy)':{precio:140,gananciaAmigo:30,gananciaNeta:31.3,plataformas:['NETFLIX','CRUNCHYROLL']},
-  'paramount+':{precio:55,gananciaAmigo:15,gananciaNeta:10,plataformas:['PARAMOUNT']},
-  'Combo Estadio Paramount+ & Disney+':{precio:120,gananciaAmigo:30,gananciaNeta:23,plataformas:['PARAMOUNT','DISNEY']},
-  'Dúo Cine (DIS + HBO)':{precio:130,gananciaAmigo:30,gananciaNeta:27.5,plataformas:['DISNEY','HBO']},
-  'Combo Melómano (SP + YT)':{precio:110,gananciaAmigo:38,gananciaNeta:30,plataformas:['SPOTIFY','YOUTUBE PREM']},
-  'Triple Play (NF + DIS + HBO)':{precio:210,gananciaAmigo:44,gananciaNeta:33.5,plataformas:['NETFLIX','DISNEY','HBO']},
-  'Combo Full Pro (NF+SP+YT)':{precio:180,gananciaAmigo:40,gananciaNeta:38,plataformas:['NETFLIX','SPOTIFY','YOUTUBE PREM']},
-  'HOME TEATER NF+SP+YT+DIS+HBO':{precio:299,gananciaAmigo:70,gananciaNeta:54.5,plataformas:['NETFLIX','SPOTIFY','YOUTUBE PREM','DISNEY','HBO']},
-  'disney + crunchy':{precio:115,gananciaAmigo:31,gananciaNeta:30,plataformas:['DISNEY','CRUNCHYROLL']},
-  'Crunchyroll (1 disp) + spotify':{precio:105,gananciaAmigo:35,gananciaNeta:33.25,plataformas:['CRUNCHYROLL','SPOTIFY']},
-  'Netflix 4K + HBO':{precio:145,gananciaAmigo:30,gananciaNeta:20,plataformas:['NETFLIX','HBO']},
-  'NETFLIX + YT PREMIUM':{precio:140,gananciaAmigo:30,gananciaNeta:26,plataformas:['NETFLIX','YOUTUBE PREM']},
-  'NETFLIX + PARAMOUNT':{precio:135,gananciaAmigo:30,gananciaNeta:22.5,plataformas:['NETFLIX','PARAMOUNT']},
-  'NETFLIX + SPOTIFY':{precio:140,gananciaAmigo:32,gananciaNeta:30,plataformas:['NETFLIX','SPOTIFY']},
-  'disney + spoti':{precio:120,gananciaAmigo:34.5,gananciaNeta:30,plataformas:['DISNEY','SPOTIFY']},
-  'disney + netflix':{precio:160,gananciaAmigo:35,gananciaNeta:27.5,plataformas:['DISNEY','NETFLIX']},
-  '2 netfllix':{precio:180,gananciaAmigo:40,gananciaNeta:20,plataformas:['NETFLIX']},
+  'Netflix 4K':{precio:90,gananciaAmigo:20,gananciaNeta:0,plataformas:['NETFLIX']},
+  'Spotify Prem.':{precio:60,gananciaAmigo:25,gananciaNeta:0,plataformas:['SPOTIFY']},
+  'YouTube Prem.':{precio:60,gananciaAmigo:25,gananciaNeta:0,plataformas:['YOUTUBE PREM']},
+  'Disney+ Prem.':{precio:70,gananciaAmigo:15,gananciaNeta:0,plataformas:['DISNEY']},
+  'HBO Max':{precio:70,gananciaAmigo:20,gananciaNeta:0,plataformas:['HBO']},
+  'Crunchyroll (1 disp)':{precio:55,gananciaAmigo:15,gananciaNeta:0,plataformas:['CRUNCHYROLL']},
+  'Combo anime (NF + Crunchy)':{precio:140,gananciaAmigo:30,gananciaNeta:0,plataformas:['NETFLIX','CRUNCHYROLL']},
+  'paramount+':{precio:55,gananciaAmigo:15,gananciaNeta:0,plataformas:['PARAMOUNT']},
+  'Combo Estadio Paramount+ & Disney+':{precio:120,gananciaAmigo:30,gananciaNeta:0,plataformas:['PARAMOUNT','DISNEY']},
+  'Dúo Cine (DIS + HBO)':{precio:130,gananciaAmigo:30,gananciaNeta:0,plataformas:['DISNEY','HBO']},
+  'Combo Melómano (SP + YT)':{precio:110,gananciaAmigo:38,gananciaNeta:0,plataformas:['SPOTIFY','YOUTUBE PREM']},
+  'Triple Play (NF + DIS + HBO)':{precio:210,gananciaAmigo:44,gananciaNeta:0,plataformas:['NETFLIX','DISNEY','HBO']},
+  'Combo Full Pro (NF+SP+YT)':{precio:180,gananciaAmigo:40,gananciaNeta:0,plataformas:['NETFLIX','SPOTIFY','YOUTUBE PREM']},
+  'HOME TEATER NF+SP+YT+DIS+HBO':{precio:299,gananciaAmigo:70,gananciaNeta:0,plataformas:['NETFLIX','SPOTIFY','YOUTUBE PREM','DISNEY','HBO']},
+  'disney + crunchy':{precio:115,gananciaAmigo:31,gananciaNeta:0,plataformas:['DISNEY','CRUNCHYROLL']},
+  'Crunchyroll (1 disp) + spotify':{precio:105,gananciaAmigo:35,gananciaNeta:0,plataformas:['CRUNCHYROLL','SPOTIFY']},
+  'Netflix 4K + HBO':{precio:145,gananciaAmigo:30,gananciaNeta:0,plataformas:['NETFLIX','HBO']},
+  'NETFLIX + YT PREMIUM':{precio:140,gananciaAmigo:30,gananciaNeta:0,plataformas:['NETFLIX','YOUTUBE PREM']},
+  'NETFLIX + PARAMOUNT':{precio:135,gananciaAmigo:30,gananciaNeta:0,plataformas:['NETFLIX','PARAMOUNT']},
+  'NETFLIX + SPOTIFY':{precio:140,gananciaAmigo:32,gananciaNeta:0,plataformas:['NETFLIX','SPOTIFY']},
+  'disney + spoti':{precio:120,gananciaAmigo:34.5,gananciaNeta:0,plataformas:['DISNEY','SPOTIFY']},
+  'disney + netflix':{precio:160,gananciaAmigo:35,gananciaNeta:0,plataformas:['DISNEY','NETFLIX']},
+  '2 netfllix':{precio:180,gananciaAmigo:40,gananciaNeta:0,plataformas:['NETFLIX','NETFLIX']},
 };
 let PAQUETES_GANANCIA = JSON.parse(JSON.stringify(PAQUETES_GANANCIA_DEFAULT));
 
@@ -1605,7 +1671,100 @@ function mostrarSeccion(sec, btn) {
     if (comprobantesCargados) renderComprobantes();
     else { document.getElementById('comprobantes-content').innerHTML = '<div class="loading">Cargando comprobantes...</div>'; cargarComprobantes().then(renderComprobantes); }
   }
+  if (sec==='historial') cargarActividad();
   if (sec==='config') renderConfig();
+}
+
+// ===== Historial de actividad (hoja 'actividad') =====
+// El backend anota una fila por cada acción (alta, renovación, edición, pago,
+// ajuste, cuentas, combos...) con quién la hizo y a qué hora. El admin ve
+// todo; un vendedor solo recibe del servidor lo que le concierne a su tag.
+let todaActividad = [];
+let actividadCargada = false;
+
+const ACTIVIDAD_INFO = {
+  alta_cliente:        ['🟢', 'Alta de cliente'],
+  renovacion:          ['🔁', 'Renovación'],
+  edicion_cliente:     ['✏️', 'Edición de cliente'],
+  archivar_cliente:    ['🗂', 'Cliente archivado'],
+  pago_comision:       ['💸', 'Pago de comisión'],
+  venta_unica:         ['🎟️', 'Venta única'],
+  ajuste_manual:       ['⚖️', 'Ajuste manual'],
+  comprobante:         ['📎', 'Comprobante subido'],
+  nueva_cuenta:        ['🔑', 'Cuenta nueva'],
+  editar_cuenta:       ['🔧', 'Cuenta editada'],
+  eliminar_cuenta:     ['🗑', 'Cuenta eliminada'],
+  liberar_slot:        ['🔓', 'Slot liberado'],
+  nuevo_combo:         ['📦', 'Combo nuevo'],
+  editar_combo:        ['📦', 'Combo editado'],
+  cambio_comision:     ['％', 'Cambio de % de comisión'],
+  alta_vendedor:       ['🧑‍💼', 'Vendedor nuevo'],
+  reset_clave_vendedor:['🔒', 'Clave de vendedor reseteada'],
+  congelar_precios:    ['🧊', 'Precios congelados'],
+};
+
+function cargarActividad(forzar) {
+  if (actividadCargada && !forzar) { renderActividad(); return; }
+  document.getElementById('actividad-content').innerHTML = '<div class="loading">Cargando historial...</div>';
+  postDatos({accion:'leerDatos',tipo:'actividad',key:APP_KEY})
+    .then(res=>{
+      todaActividad = res.rows||[];
+      actividadCargada = true;
+      renderActividad();
+    })
+    .catch(()=>{
+      document.getElementById('actividad-content').innerHTML = '<div class="error-msg">⚠️ No se pudo cargar el historial. <a href="#" onclick="cargarActividad(true);return false;" style="color:inherit;text-decoration:underline;">Reintentar</a></div>';
+    });
+}
+
+function renderActividad() {
+  const cont = document.getElementById('actividad-content');
+  const q = (document.getElementById('buscar-actividad').value||'').trim().toLowerCase();
+  // Las filas llegan en orden de escritura (viejas primero) — se invierten
+  // para mostrar lo más reciente arriba.
+  let filas = todaActividad.slice().reverse();
+  if (q) {
+    filas = filas.filter(f => {
+      const info = ACTIVIDAD_INFO[(f.accion||'').trim()] || ['', f.accion||''];
+      return ((f.usuario||'')+' '+(f.vendedor||'')+' '+(f.accion||'')+' '+info[1]+' '+(f.referencia||'')+' '+(f.detalle||'')).toLowerCase().includes(q);
+    });
+  }
+  if (!filas.length) {
+    cont.innerHTML = `<div class="empty"><div class="empty-icon">📜</div><div class="empty-title">${q?'Nada que coincida con la búsqueda':'Aún no hay movimientos registrados'}</div><div class="empty-sub">${q?'Prueba con otra palabra.':'A partir de ahora, cada alta, renovación, pago o cambio queda anotado aquí solo.'}</div></div>`;
+    return;
+  }
+  const LIMITE = 150;
+  const recortado = filas.length > LIMITE;
+  filas = filas.slice(0, LIMITE);
+  // Agrupar por fecha (dd/mm/yyyy) para leerse como un diario.
+  const porDia = [];
+  filas.forEach(f => {
+    const dia = (f.fecha||'—').trim();
+    if (!porDia.length || porDia[porDia.length-1].dia !== dia) porDia.push({dia, items:[]});
+    porDia[porDia.length-1].items.push(f);
+  });
+  const hoyStr = formatoDDMMYYYY(new Date());
+  const ayer = new Date(); ayer.setDate(ayer.getDate()-1);
+  const ayerStr = formatoDDMMYYYY(ayer);
+  cont.innerHTML = porDia.map(g => `
+    <div style="font-size:11.5px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:16px 0 8px;">${g.dia===hoyStr?'Hoy':(g.dia===ayerStr?'Ayer':esc(g.dia))}</div>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+      ${g.items.map(f => {
+        const info = ACTIVIDAD_INFO[(f.accion||'').trim()] || ['•', (f.accion||'movimiento')];
+        const quien = esc(f.usuario||'?');
+        const vend = (f.vendedor||'').trim();
+        return `<div class="cuenta-card" style="padding:10px 14px;display:flex;align-items:flex-start;gap:10px;">
+          <div style="font-size:16px;line-height:1.3;">${info[0]}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;">${info[1]}${f.referencia?` <span style="font-weight:600;color:var(--text3);">· ${esc(f.referencia)}</span>`:''}</div>
+            ${f.detalle?`<div style="font-size:12px;color:var(--text2);margin-top:2px;word-break:break-word;">${esc(f.detalle)}</div>`:''}
+            <div style="font-size:11px;color:var(--text3);margin-top:3px;">por <strong>${quien}</strong>${vend && vend.toLowerCase()!==quien.toLowerCase()?` · vendedor: ${esc(nombreVendedorUI_(vend))}`:''}</div>
+          </div>
+          <div style="font-size:11.5px;color:var(--text3);white-space:nowrap;">${esc(f.hora||'')}</div>
+        </div>`;
+      }).join('')}
+    </div>`).join('') +
+    (recortado ? `<div style="font-size:12px;color:var(--text3);text-align:center;margin-top:12px;">Se muestran los últimos ${LIMITE} movimientos${q?' que coinciden':''}.</div>` : '');
 }
 
 // Carga (o recarga) los datos de la sección de Ganancias en paralelo. Las 3
@@ -1639,6 +1798,7 @@ function recargarVista() {
   if (seccionActual==='cuentas')  cargarCuentas(true);
   if (seccionActual==='catalogo') { cuentasCargadas=false; cargarCatalogo(); }
   if (seccionActual==='ganancias') cargarGanancias();
+  if (seccionActual==='historial') cargarActividad(true);
 }
 
 // Marca como "sucia" la caché tras un cambio que afecta slots (cuentas) y/o el
@@ -1647,6 +1807,7 @@ function recargarVista() {
 function marcarDatosSucios() {
   cuentasCargadas = false;
   gananciasCargadas = false;
+  actividadCargada = false; // el historial también quedó viejo tras un cambio
 }
 
 function showGananciasTab(tab, btn) {
@@ -2391,7 +2552,10 @@ function verDetalle(id) {
   const esVendedor = c.vendedor && c.vendedor.toLowerCase()!=='yo';
   const paqData = buscarDatosCombo_(c.paquete); // con prefijo: combos legados no salen en $0
   const pctVendedor = COMISIONES[c.vendedor.toLowerCase()] !== undefined ? COMISIONES[c.vendedor.toLowerCase()] : 100;
-  const comisionVend = esVendedor && paqData ? paqData.gananciaAmigo * (pctVendedor/100) : 0;
+  // Si la venta fue de más meses que la base del combo (ej. 3 meses de un
+  // combo mensual), la comisión mostrada escala igual que la abonada.
+  const factorMesesFicha = paqData ? Math.max(1, parseInt(c.meses)||1) / Math.max(1, parseInt(paqData.meses)||1) : 1;
+  const comisionVend = esVendedor && paqData ? paqData.gananciaAmigo * (pctVendedor/100) * factorMesesFicha : 0;
   // Desglose visible solo en ventas de varios meses (donde el reparto confunde):
   // deja claro qué es pago ÚNICO (la comisión del vendedor) y qué se REPARTE por
   // mes. Funciona con cualquier combo de N meses, usando sus propias cantidades.
@@ -2545,7 +2709,7 @@ function poblarSelectsPaquetes() {
     // si el cliente cambió de combo.
     sel.innerHTML = '<option value="">Selecciona...</option>' + Object.entries(PAQUETES_GANANCIA).map(([nombre,d])=>{
       const valor = `${nombre}|${d.precio}|${d.gananciaAmigo}|${d.gananciaNeta}`;
-      return `<option value="${valor}">${nombre} — $${d.precio}${d.meses>1?' · '+d.meses+' meses':''}</option>`;
+      return `<option value="${esc(valor)}">${esc(nombre)} — $${d.precio}${d.meses>1?' · '+d.meses+' meses':''}</option>`;
     }).join('');
     if (valorActual) sel.value = valorActual;
   });
@@ -2555,24 +2719,134 @@ function abrirModalNuevo() {
   poblarSelectsPaquetes();
   document.getElementById('modal-nuevo').classList.add('open');
   document.getElementById('form-status').innerHTML='';
+  document.getElementById('borrador-banner').innerHTML='';
+  document.getElementById('btn-guardar').disabled=false;
+  document.getElementById('btn-guardar').textContent='Guardar cliente';
+  document.getElementById('btn-guardar').style.display='';
+  // Si quedó un borrador a medias (modal minimizado o cerrado sin guardar),
+  // se retoma tal cual en vez de empezar con el formulario vacío.
+  const draft = leerBorradorNuevo_();
+  if (draft) { restaurarBorradorNuevo_(draft); return; }
+  reiniciarFormNuevo_();
+}
+
+function reiniciarFormNuevo_() {
+  _preselCuentasNuevo = null; // que un borrador descartado no preseleccione nada después
   document.getElementById('n-cliente').value='';
   document.getElementById('n-contacto').value='';
   document.getElementById('n-paquete').value='';
   document.getElementById('n-precio').value='';
+  document.getElementById('n-meses').value='1';
   document.getElementById('n-notas').value='';
   document.getElementById('n-cuentas-selects').innerHTML='<div style="font-size:13px;color:var(--text3);">Selecciona primero un paquete...</div>';
   document.getElementById('n-renovacion').value='';
   document.getElementById('n-vendedor').value= MI_ROL==='admin' ? 'YO' : MI_VENDEDOR;
   document.getElementById('n-pago').value='PAGADO';
   document.getElementById('ganancia-preview').style.display='none';
-  document.getElementById('btn-guardar').disabled=false;
-  document.getElementById('btn-guardar').textContent='Guardar cliente';
-  document.getElementById('btn-guardar').style.display='';
-  const hoy=hoyInputLocal();
-  document.getElementById('n-inicio').value=hoy;
+  document.getElementById('n-inicio').value=hoyInputLocal();
   nuevoClienteOpId = nuevoOpId();
   calcularRenovacion(); generarID();
 }
+
+// ===== Borrador del formulario "Nuevo cliente" =====
+// Todo lo tecleado se guarda solo en localStorage: si minimizas o cierras el
+// modal para checar otra cosa (o se recarga la página), al volver a tocar "+"
+// sigue todo donde lo dejaste. Se limpia al guardar el cliente o con
+// "Empezar de cero", y caduca a los 3 días para no resucitar borradores fósiles.
+const BORRADOR_NUEVO_KEY = 'borrador_nuevo_cliente';
+let _preselCuentasNuevo = null;
+
+function guardarBorradorNuevo_() {
+  if (!document.getElementById('modal-nuevo').classList.contains('open')) return;
+  try {
+    const v = id => (document.getElementById(id)||{}).value || '';
+    const d = {
+      cliente: v('n-cliente'), contacto: v('n-contacto'), paquete: v('n-paquete'),
+      meses: v('n-meses'), inicio: v('n-inicio'), vendedor: v('n-vendedor'),
+      pago: v('n-pago'), notas: v('n-notas'),
+      cuentas: Array.from(document.querySelectorAll('.n-cuenta-plat')).map(s=>s.value).filter(Boolean),
+      opId: nuevoClienteOpId, t: Date.now()
+    };
+    // Formulario en blanco = no hay nada que recordar.
+    if (!d.cliente && !d.contacto && !d.paquete && !d.notas) { limpiarBorradorNuevo_(); return; }
+    localStorage.setItem(BORRADOR_NUEVO_KEY, JSON.stringify(d));
+    actualizarFabBorrador_();
+  } catch(e){}
+}
+function leerBorradorNuevo_() {
+  try {
+    const d = JSON.parse(localStorage.getItem(BORRADOR_NUEVO_KEY)||'null');
+    if (d && d.t && (Date.now()-d.t) < 3*24*60*60*1000) return d;
+  } catch(e){}
+  return null;
+}
+function limpiarBorradorNuevo_() {
+  try { localStorage.removeItem(BORRADOR_NUEVO_KEY); } catch(e){}
+  actualizarFabBorrador_();
+}
+function descartarBorradorNuevo_() {
+  limpiarBorradorNuevo_();
+  document.getElementById('borrador-banner').innerHTML='';
+  reiniciarFormNuevo_();
+}
+function restaurarBorradorNuevo_(d) {
+  document.getElementById('n-cliente').value=d.cliente||'';
+  document.getElementById('n-contacto').value=d.contacto||'';
+  document.getElementById('n-notas').value=d.notas||'';
+  document.getElementById('n-inicio').value=d.inicio||hoyInputLocal();
+  document.getElementById('n-pago').value=d.pago||'PAGADO';
+  const selV=document.getElementById('n-vendedor');
+  if(d.vendedor && [...selV.options].some(o=>o.value===d.vendedor)) selV.value=d.vendedor;
+  else selV.value = MI_ROL==='admin' ? 'YO' : MI_VENDEDOR;
+  // El opId del borrador se conserva: si el primer intento de guardar SÍ llegó
+  // al servidor, reintentar con el mismo opId no duplica al cliente.
+  nuevoClienteOpId = d.opId || nuevoOpId();
+  const selP=document.getElementById('n-paquete');
+  if(d.paquete && [...selP.options].some(o=>o.value===d.paquete)){
+    selP.value=d.paquete;
+    _preselCuentasNuevo = (d.cuentas||[]).slice();
+    actualizarPrecio();
+    // actualizarPrecio regresa la duración a la base del combo — se re-aplica la elegida.
+    if(d.meses){ document.getElementById('n-meses').value=d.meses; cambioMesesNuevo_(); }
+  } else {
+    selP.value='';
+    document.getElementById('n-precio').value='';
+    document.getElementById('n-meses').value='1';
+    document.getElementById('ganancia-preview').style.display='none';
+    document.getElementById('n-cuentas-selects').innerHTML='<div style="font-size:13px;color:var(--text3);">Selecciona primero un paquete...</div>';
+  }
+  generarID();
+  calcularRenovacion();
+  document.getElementById('borrador-banner').innerHTML =
+    '<div style="background:rgba(96,165,250,0.12);border:1px solid rgba(96,165,250,0.35);border-radius:12px;padding:10px 12px;font-size:12.5px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px;">'+
+    '<span>📝 Se restauró el borrador que dejaste a medias.</span>'+
+    '<button onclick="descartarBorradorNuevo_()" style="background:none;border:none;color:#60a5fa;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Empezar de cero</button></div>';
+}
+function minimizarModalNuevo() {
+  guardarBorradorNuevo_();
+  document.getElementById('modal-nuevo').classList.remove('open');
+  if (leerBorradorNuevo_()) toast('Borrador guardado — toca 📝 para continuar', 'success', '📝');
+}
+// El botón "+" cambia a 📝 cuando hay un borrador esperando.
+function actualizarFabBorrador_() {
+  const fab=document.getElementById('fab-nuevo');
+  if(!fab) return;
+  const hay=!!leerBorradorNuevo_();
+  fab.textContent = hay ? '📝' : '+';
+  fab.title = hay ? 'Continuar borrador de cliente' : 'Agregar cliente';
+}
+// Autoguardado: cualquier cambio en el formulario actualiza el borrador.
+(function initBorradorNuevo_(){
+  ['n-cliente','n-contacto','n-paquete','n-meses','n-inicio','n-vendedor','n-pago','n-notas'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('input', guardarBorradorNuevo_);
+    el.addEventListener('change', guardarBorradorNuevo_);
+  });
+  const cont=document.getElementById('n-cuentas-selects');
+  if(cont) cont.addEventListener('change', guardarBorradorNuevo_);
+  actualizarFabBorrador_();
+})();
 function cerrarModal(id) {
   document.getElementById(id).classList.remove('open');
   // Cerrar el panel de notificaciones cuenta como "ya las vi": se apaga la
@@ -2585,14 +2859,27 @@ function generarID() {
   if(!nombre) return;
   document.getElementById('n-id').value='CL-'+(ultimoID+1);
 }
+// ===== Duración de la venta (meses) =====
+// Un combo tiene una duración base (mesesCombo, casi siempre 1). Si el
+// vendedor vende MÁS meses de un jalón (ej. 3 meses de Spotify a $180), el
+// selector de duración multiplica precio, ganancia y comisión por el factor
+// (meses elegidos / meses base) y empuja el vencimiento hasta el final real.
+function factorMesesVenta_(selectId, nombreCombo) {
+  const base = mesesCombo(nombreCombo);
+  const el = document.getElementById(selectId);
+  const m = Math.max(1, Math.min(12, parseInt(el && el.value) || base));
+  return { meses: m, base, factor: m / base };
+}
+function precioBonito_(n) { return n % 1 ? n.toFixed(2) : String(n); }
+
 function calcularRenovacion() {
   const inicio=document.getElementById('n-inicio').value; if(!inicio) return;
   const d=fechaInputLocal(inicio); if(!d) return;
-  // El vencimiento depende de la duración del combo: 1 mes = +30 días,
-  // 3 meses = +90, etc. Así una venta de varios meses no vence al mes.
+  // El vencimiento depende de la duración ELEGIDA de la venta (que arranca en
+  // la duración base del combo): 1 mes = +1 mes, 3 meses = +3, etc.
   const sel=document.getElementById('n-paquete').value;
   const nombre=sel?sel.split('|')[0]:'';
-  const meses=nombre?mesesCombo(nombre):1;
+  const meses=nombre?factorMesesVenta_('n-meses', nombre).meses:1;
   d.setMonth(d.getMonth()+meses);
   document.getElementById('n-renovacion').value=formatoDDMMYYYY(d);
 }
@@ -2600,15 +2887,31 @@ function actualizarPrecio() {
   const sel=document.getElementById('n-paquete').value;
   if(!sel){
     document.getElementById('n-precio').value='';
+    document.getElementById('n-meses').value='1';
     document.getElementById('ganancia-preview').style.display='none';
     document.getElementById('n-cuentas-selects').innerHTML='<div style="font-size:13px;color:var(--text3);">Selecciona primero un paquete...</div>';
     return;
   }
   const p=sel.split('|');
-  document.getElementById('n-precio').value='$'+p[1];
-  calcularGanancia();
-  calcularRenovacion();   // recalcula vencimiento según la duración del combo
+  // Al cambiar de combo, la duración regresa a la base de ESE combo.
+  const selMeses = document.getElementById('n-meses');
+  const base = mesesCombo(p[0]);
+  if (![...selMeses.options].some(o=>parseInt(o.value)===base)) selMeses.value='1';
+  else selMeses.value=String(base);
+  cambioMesesNuevo_();
   cargarCuentasDisponibles(p[0]);
+}
+// Recalcula precio/ganancia/vencimiento cuando cambia la duración (no toca
+// los selects de cuentas: las plataformas del combo son las mismas).
+function cambioMesesNuevo_() {
+  const sel=document.getElementById('n-paquete').value;
+  if(!sel) return;
+  const p=sel.split('|');
+  const fm=factorMesesVenta_('n-meses', p[0]);
+  const precioTotal=(parseFloat(p[1])||0)*fm.factor;
+  document.getElementById('n-precio').value='$'+precioBonito_(precioTotal);
+  calcularGanancia();
+  calcularRenovacion();
 }
 
 // targetId: dónde pintar los selects ('n-cuentas-selects' o 'e-cuentas-selects')
@@ -2668,6 +2971,18 @@ function cargarCuentasDisponibles(paquete, targetId, selectClass, cuentasActuale
   });
 
   container.innerHTML = html;
+
+  // Restaurar las cuentas elegidas de un borrador (solo el form de nuevo
+  // cliente): cada valor pendiente se asigna al primer select que lo tenga
+  // como opción, sin repetir el mismo valor en dos selects.
+  if (selectClass === 'n-cuenta-plat' && _preselCuentasNuevo && _preselCuentasNuevo.length) {
+    const pendientes = [..._preselCuentasNuevo];
+    _preselCuentasNuevo = null;
+    document.querySelectorAll('.n-cuenta-plat').forEach(sel => {
+      const i = pendientes.findIndex(val => val && [...sel.options].some(o=>o.value===val));
+      if (i !== -1) { sel.value = pendientes[i]; pendientes.splice(i,1); }
+    });
+  }
 }
 
 // ===== Catálogo (visible para admin y vendedores) =====
@@ -2693,17 +3008,30 @@ function cargarCatalogo() {
   }
 }
 
+// Disponibilidad REAL de un combo: para venderlo se necesita lugar en TODAS
+// sus plataformas, así que lo que manda es el MÍNIMO entre ellas — antes se
+// SUMABAN los slots de todas, y un "Combo anime" con Netflix lleno pero
+// Crunchy libre aparecía como disponible cuando en realidad no se podía
+// vender. Devuelve {disponibles, faltantes}: cuántas veces se puede vender el
+// combo completo, y qué plataformas están sin lugar (para avisarlo tal cual).
+// Si el combo repite plataforma (ej. "2 Spotify"), cada venta necesita 2
+// slots de esa plataforma y se divide entre lo que pide.
 function disponibilidadCombo(nombrePaquete) {
-  // Lista ÚNICA: si el combo lleva la misma plataforma 2 veces (ej. "2
-  // Spotify"), sus slots libres no deben contarse doble.
-  const plataformas = [...new Set(detectarPlataformas(nombrePaquete))];
-  let totalLibres = 0;
-  plataformas.forEach(plat => {
+  const necesarias = {};
+  detectarPlataformas(nombrePaquete).forEach(p => necesarias[p] = (necesarias[p]||0) + 1);
+  let min = Infinity;
+  const faltantes = [];
+  Object.keys(necesarias).forEach(plat => {
+    let libres = 0;
     todasCuentas.filter(c => c.plataforma === plat).forEach(cuenta => {
-      totalLibres += cuenta.slots.slice(0, cuenta.slotsTotal).filter(s => !s || s.trim()==='').length;
+      libres += cuenta.slots.slice(0, cuenta.slotsTotal).filter(s => !s || s.trim()==='').length;
     });
+    const posibles = Math.floor(libres / necesarias[plat]);
+    if (posibles <= 0) faltantes.push(plat);
+    min = Math.min(min, posibles);
   });
-  return totalLibres;
+  if (!isFinite(min)) min = 0;
+  return { disponibles: Math.max(0, min), faltantes };
 }
 
 let catalogoPlatFiltro = 'TODAS';
@@ -2815,8 +3143,15 @@ function renderCatalogo() {
   // cambio deja de marcarse como "ACTUALIZADO" (ya es el precio normal).
   const hace7dias = new Date(); hace7dias.setDate(hace7dias.getDate()-7);
   cont.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px;">` + combos.map(([nombre, d]) => {
-    const libres = disponibilidadCombo(nombre);
+    const disp = disponibilidadCombo(nombre);
+    const libres = disp.disponibles;
     const sinStock = libres <= 0;
+    // Aviso honesto: si el combo no se puede vender, se dice POR CUÁL
+    // plataforma es (ej. "Sin lugar en NETFLIX") — que haya slots en las
+    // demás no sirve de nada y solo confundía a los vendedores nuevos.
+    const textoDisp = sinStock
+      ? 'Sin lugar en ' + (disp.faltantes.length ? disp.faltantes.join(' y ') : 'sus plataformas')
+      : (libres + (libres !== 1 ? ' disponibles' : ' disponible'));
     const miGanancia = esAdmin ? d.gananciaNeta : (d.gananciaAmigo * (miPct/100));
     const plats = detectarPlataformas(nombre);
     const cambioReciente = (todosCambiosCatalogo||[]).some(h => h.nombre === nombre && parseFecha(h.fecha) && parseFecha(h.fecha) >= hace7dias);
@@ -2824,8 +3159,8 @@ function renderCatalogo() {
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px;">
         <div style="flex:1;">
           <div style="font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-            <span title="${plats.join(', ')}">${plats.map(p=>PLAT_ICONS[p]||'📦').join('')}</span>
-            <span>${nombre}</span>
+            <span title="${esc(plats.join(', '))}">${plats.map(p=>PLAT_ICONS[p]||'📦').join('')}</span>
+            <span>${esc(nombre)}</span>
             ${(d.meses||1)>1?`<span style="font-size:11px;color:var(--violet2);font-weight:600;">📆 ${d.meses} meses</span>`:''}
             ${cambioReciente?'<span style="font-size:10px;font-weight:800;color:var(--amber);background:var(--amber-bg);padding:2px 7px;border-radius:99px;">ACTUALIZADO</span>':''}
           </div>
@@ -2842,7 +3177,7 @@ function renderCatalogo() {
         </div>
         <div class="cuenta-info-item">
           <div class="cuenta-info-label">Disponibilidad</div>
-          <div style="font-size:12.5px;font-weight:600;color:${sinStock?'var(--red)':'var(--green)'};margin-top:2px;">${sinStock ? 'Sin slots libres' : libres+' slot'+(libres!==1?'s':'')+' libre'+(libres!==1?'s':'')}</div>
+          <div style="font-size:12.5px;font-weight:600;color:${sinStock?'var(--red)':'var(--green)'};margin-top:2px;" title="Se puede vender completo ${libres} vez/veces (mínimo entre sus plataformas)">${textoDisp}</div>
         </div>
       </div>
       ${esAdmin ? `<div style="font-size:11px;color:var(--text3);margin-top:8px;">Ganancia amigo (vendedores): $${d.gananciaAmigo}</div>` : ''}
@@ -2866,15 +3201,21 @@ function detectarPlataformas(paquete) {
 
   // Respaldo: combos antiguos creados antes de este fix, sin el campo
   // explícito guardado. Se adivina por palabras clave en el nombre.
+  // OJO: las abreviaturas (nf, sp, yt, dis) solo valen como PALABRA COMPLETA,
+  // no como subcadena — "Crunchyroll (1 disp)" contiene "dis" y "sp" y antes
+  // marcaba Disney y Spotify en un combo que solo es Crunchyroll. Los nombres
+  // completos (netflix, spotify...) sí se buscan como subcadena.
   const p = paquete.toLowerCase();
+  const tokens = p.split(/[^a-z0-9á-ú]+/).filter(Boolean);
+  const esToken = t => tokens.includes(t);
   const plats = [];
-  if (p.includes('netflix') || p.includes('nf') || p.includes('home teater')) plats.push('NETFLIX');
-  if (p.includes('spotify') || p.includes('sp') || p.includes('melómano') || p.includes('melomano')) plats.push('SPOTIFY');
-  if (p.includes('youtube') || p.includes('yt') || p.includes('premium')) plats.push('YOUTUBE PREM');
-  if (p.includes('disney') || p.includes('dis')) plats.push('DISNEY');
+  if (p.includes('netflix') || p.includes('netfllix') || esToken('nf') || p.includes('home teater') || p.includes('home theater')) plats.push('NETFLIX');
+  if (p.includes('spoti') || esToken('sp') || p.includes('melómano') || p.includes('melomano')) plats.push('SPOTIFY');
+  if (p.includes('youtube') || esToken('yt')) plats.push('YOUTUBE PREM');
+  if (p.includes('disney') || esToken('dis')) plats.push('DISNEY');
   if (p.includes('hbo')) plats.push('HBO');
   if (p.includes('paramount')) plats.push('PARAMOUNT');
-  if (p.includes('crunchy') || p.includes('crunchyroll')) plats.push('CRUNCHYROLL');
+  if (p.includes('crunchy')) plats.push('CRUNCHYROLL');
   if (p.includes('vix')) plats.push('VIX');
   if (!plats.length) plats.push('NETFLIX');
   return [...new Set(plats)];
@@ -2886,8 +3227,10 @@ function calcularGanancia() {
   const vendedor=document.getElementById('n-vendedor').value.toLowerCase();
   if(!sel){document.getElementById('ganancia-preview').style.display='none';return;}
   const p=sel.split('|');
-  const gananciaAmigo=parseFloat(p[2]);
-  const gananciaMia=parseFloat(p[3]);
+  // Escala por duración de la venta: 3 meses = 3× ganancia y 3× comisión.
+  const fm=factorMesesVenta_('n-meses', p[0]);
+  const gananciaAmigo=parseFloat(p[2])*fm.factor;
+  const gananciaMia=parseFloat(p[3])*fm.factor;
   let miGanancia, comision=0;
   if(vendedor==='yo'){miGanancia=gananciaMia+gananciaAmigo;}
   else{
@@ -2910,9 +3253,43 @@ async function guardarCliente() {
     document.getElementById('form-status').innerHTML='<div class="error-msg">⚠️ Completa los campos obligatorios: nombre, paquete y fecha de inicio.</div>';
     return;
   }
+  const partes=paquete.split('|');
+
+  // Si las cuentas siguen bajando del servidor, los selects aún no existen —
+  // guardar en ese momento dejaría al cliente sin slot sin que se note.
+  if(!cuentasCargadas){
+    document.getElementById('form-status').innerHTML='<div class="error-msg">⚠️ Las cuentas aún se están cargando — espera un segundo y vuelve a intentar.</div>';
+    return;
+  }
+  // Cuenta(s): cada plataforma del combo debe llevar su cuenta elegida — un
+  // cliente guardado sin cuenta no ocupa ningún slot y "desaparece" de la
+  // pestaña Cuentas (había que entrar a editarlo para corregirlo).
+  const selectsCuenta=Array.from(document.querySelectorAll('.n-cuenta-plat'));
+  const sinElegir=selectsCuenta.filter(s=>!s.value);
+  if(sinElegir.length){
+    const platsFaltan=sinElegir.map(s=>s.dataset.plat||'una plataforma').join(', ');
+    document.getElementById('form-status').innerHTML='<div class="error-msg">⚠️ Falta elegir la cuenta de: <strong>'+esc(platsFaltan)+'</strong>. Así el cliente sí queda asignado a su slot.</div>';
+    return;
+  }
+  // Plataformas del combo que NI SIQUIERA tienen select (sin slots libres):
+  // no se guarda un cliente incompleto. Antes una confirmación permitía seguir
+  // y el registro quedaba sin aparecer en alguna cuenta.
+  const platsCombo=detectarPlataformas(partes[0]);
+  if(selectsCuenta.length < platsCombo.length){
+    const faltan=platsCombo.filter((p,i)=>!selectsCuenta[i] || selectsCuenta[i].dataset.plat!==p);
+    document.getElementById('form-status').innerHTML='<div class="error-msg">⚠️ No hay slots suficientes para completar este combo'+(faltan.length?' en <strong>'+esc([...new Set(faltan)].join(', '))+'</strong>':'')+'. Libera o agrega una cuenta antes de guardar.</div>';
+    return;
+  }
+
+  // Teléfono: si viene, deben ser 10 dígitos (números incompletos hacen que
+  // el WhatsApp y los recordatorios fallen en silencio).
+  const telNuevo=document.getElementById('n-contacto').value.replace(/\D/g,'');
+  if(telNuevo && telNuevo.length!==10){
+    const ok=await confirmar('El teléfono "'+telNuevo+'" tiene '+telNuevo.length+' dígitos (deberían ser 10).\n\n¿Guardar así de todas formas?');
+    if(!ok) return;
+  }
   // Aviso de duplicado: si el teléfono ya existe en otro cliente activo,
   // confirmamos antes de registrar — evita meter dos veces a la misma persona.
-  const telNuevo=document.getElementById('n-contacto').value.replace(/\D/g,'');
   if(telNuevo){
     const dup=todosClientes.find(x=>x.estado_raw!=='ARCHIVADO' && (x.contacto||'').replace(/\D/g,'')===telNuevo);
     if(dup){
@@ -2920,10 +3297,11 @@ async function guardarCliente() {
       if(!ok) return;
     }
   }
-  const partes=paquete.split('|');
   const vendedor=document.getElementById('n-vendedor').value.toLowerCase();
-  const gananciaAmigo=parseFloat(partes[2]);
-  const gananciaMia=parseFloat(partes[3]);
+  // Escala por duración de la venta (3 meses = 3× precio, ganancia y comisión).
+  const fm=factorMesesVenta_('n-meses', partes[0]);
+  const gananciaAmigo=parseFloat(partes[2])*fm.factor;
+  const gananciaMia=parseFloat(partes[3])*fm.factor;
   let miGanancia;
   if (vendedor==='yo') { miGanancia = gananciaMia+gananciaAmigo; }
   else {
@@ -2938,15 +3316,15 @@ async function guardarCliente() {
     cliente,
     contacto:document.getElementById('n-contacto').value.trim(),
     paquete:partes[0],
-    precio:partes[1],
-    cuenta:Array.from(document.querySelectorAll('.n-cuenta-plat')).map(s=>s.value).filter(Boolean).join(', '),
+    precio:precioBonito_((parseFloat(partes[1])||0)*fm.factor),
+    cuenta:selectsCuenta.map(s=>s.value).filter(Boolean).join(', '),
     inicio:formatoDDMMYYYY(fechaInputLocal(inicio)),
     renovacion:document.getElementById('n-renovacion').value,
     vendedor:document.getElementById('n-vendedor').value,
     pago:document.getElementById('n-pago').value,
     ganancia:miGanancia.toFixed(2),
     gananciaAmigo:gananciaAmigo.toFixed(2),
-    meses:mesesCombo(partes[0]),
+    meses:fm.meses,
     notas:document.getElementById('n-notas').value.trim(),
     opId:nuevoClienteOpId,
     key:APP_KEY
@@ -2964,6 +3342,8 @@ async function guardarCliente() {
         const idSrv = parseInt(String(res.id||'').replace('CL-',''));
         ultimoID = (!isNaN(idSrv) && idSrv > ultimoID) ? idSrv : ultimoID + 1;
         marcarDatosSucios();
+        limpiarBorradorNuevo_(); // el borrador ya cumplió: cliente guardado
+        document.getElementById('borrador-banner').innerHTML='';
         const tieneTelefono = !!datos.contacto;
         ultimoClienteGuardado = datos;
         document.getElementById('form-status').innerHTML = `
@@ -2988,7 +3368,7 @@ async function guardarCliente() {
       }
     })
     .catch(err=>{
-      document.getElementById('form-status').innerHTML=`<div class="error-msg">⚠️ No se pudo guardar. Intenta de nuevo.<br><small>${err.message}</small></div>`;
+      document.getElementById('form-status').innerHTML=`<div class="error-msg">⚠️ No se pudo guardar. Intenta de nuevo.<br><small>${esc(err.message||'Error desconocido')}</small></div>`;
       btn.disabled=false; btn.textContent='Guardar cliente';
     });
 }
@@ -3111,7 +3491,7 @@ function renderCuentas() {
 
   let html = bannerHTML;
   Object.keys(grupos).forEach(plat => {
-    html += `<div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin:18px 0 8px;">${PLAT_ICONS[plat]||'📦'} ${plat}</div>`;
+    html += `<div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin:18px 0 8px;">${PLAT_ICONS[plat]||'📦'} ${esc(plat)}</div>`;
     grupos[plat].forEach((c, idx) => {
       const ocupados = c.slots.filter(s => s && s !== 'x' && s !== 'X').length;
       const bloqueados = c.slots.filter(s => s === 'x' || s === 'X').length;
@@ -3122,7 +3502,7 @@ function renderCuentas() {
         return '<div class="slot-mini ocupado" title="Ocupado"></div>';
       }).join('');
       const cardId = `cuenta-${plat}-${idx}`.replace(/\s/g,'_');
-      const nombreSeguroCuenta = (c.nombre||'').replace(/'/g,"\\'");
+      const nombreArgCuenta = esc(JSON.stringify(c.nombre||''));
       const claseLlena = libres<=0 ? ' card-llena' : (libres===1 ? ' card-casi' : '');
       const estadoLibres = libres<=0
         ? '<div class="cuenta-badge llena">LLENA</div>'
@@ -3132,8 +3512,8 @@ function renderCuentas() {
       html += `<div class="cuenta-card${claseLlena}">
         <div class="cuenta-header" onclick="toggleCuenta('${cardId}')">
           <div>
-            <div class="cuenta-plat">${c.nombre}</div>
-            <div class="cuenta-correo" onclick="event.stopPropagation();copiarCorreoCuenta('${nombreSeguroCuenta}')" style="cursor:pointer;" title="Toca para copiar el correo">${c.correo} 📋</div>
+            <div class="cuenta-plat">${esc(c.nombre)}</div>
+            <div class="cuenta-correo" onclick="event.stopPropagation();copiarCorreoCuenta(${nombreArgCuenta})" style="cursor:pointer;" title="Toca para copiar el correo">${esc(c.correo)} 📋</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px;">
             <div style="text-align:right;">
@@ -3141,22 +3521,22 @@ function renderCuentas() {
               <div style="font-size:11px;color:var(--text3);">${ocupados} ocupado${ocupados!==1?'s':''}</div>
             </div>
             <div class="cuenta-slots-summary">${slotsMini}</div>
-            ${MI_ROL==='admin' ? `<button onclick="event.stopPropagation();copiarAcceso('${nombreSeguroCuenta}')" title="Copiar correo y contraseña" style="background:var(--surface);border:1px solid var(--border-strong);border-radius:9px;width:34px;height:34px;font-size:15px;cursor:pointer;color:var(--text2);flex-shrink:0;line-height:1;">📋</button>` : ''}
+            ${MI_ROL==='admin' ? `<button onclick="event.stopPropagation();copiarAcceso(${nombreArgCuenta})" title="Copiar correo y contraseña" style="background:var(--surface);border:1px solid var(--border-strong);border-radius:9px;width:34px;height:34px;font-size:15px;cursor:pointer;color:var(--text2);flex-shrink:0;line-height:1;">📋</button>` : ''}
           </div>
         </div>
         <div class="cuenta-body" id="${cardId}">
           <div class="cuenta-info">
             <div class="cuenta-info-item">
               <div class="cuenta-info-label">📧 Correo · toca para copiar</div>
-              <div class="cuenta-info-value" style="cursor:pointer;" onclick="copiarCorreoCuenta('${nombreSeguroCuenta}')">${c.correo||'—'}</div>
+              <div class="cuenta-info-value" style="cursor:pointer;" onclick="copiarCorreoCuenta(${nombreArgCuenta})">${esc(c.correo||'—')}</div>
             </div>
             <div class="cuenta-info-item">
               <div class="cuenta-info-label">🔑 Contraseña · toca para copiar</div>
-              <div class="cuenta-info-value" id="pass-${cardId}" style="filter:blur(4px);cursor:pointer;" onclick="copiarPassCuenta('${nombreSeguroCuenta}','pass-${cardId}')">${c.contrasena||'—'}</div>
+              <div class="cuenta-info-value" id="pass-${cardId}" style="filter:blur(4px);cursor:pointer;" onclick="copiarPassCuenta(${nombreArgCuenta},'pass-${cardId}')">${esc(c.contrasena||'—')}</div>
             </div>
             <div class="cuenta-info-item" style="grid-column:1/-1;">
               <div class="cuenta-info-label">Cuenta de pago</div>
-              <div class="cuenta-info-value">${c.cuentaPago||'—'}</div>
+              <div class="cuenta-info-value">${esc(c.cuentaPago||'—')}</div>
             </div>
           </div>
           ${c.notas ? `<div style="background:var(--amber-bg);border-radius:10px;padding:9px 11px;font-size:12px;color:var(--amber);margin-bottom:12px;">📝 ${esc(c.notas)}</div>` : ''}
@@ -3290,25 +3670,25 @@ function confirmarEliminarCuenta(nombreCuenta) {
 
 // ===== MEJORA 2: acciones rápidas por cuenta (solo admin) =====
 function renderAccionesCuenta(c) {
-  const nombreSeguro = c.nombre.replace(/'/g,"\\'");
+  const nombreArg = esc(JSON.stringify(c.nombre||''));
   const gestion = GESTION_PLATAFORMA[c.plataforma];
   const esPassword = gestion && gestion.tipo === 'password';
   let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">';
   // Botón "Gestionar" → abre la página de la plataforma (cambiar contraseña o
   // administrar plan familiar, según el tipo).
   if (gestion) {
-    html += `<button class="acc-btn" onclick="abrirGestionarPlataforma('${nombreSeguro}')">🔧 ${gestion.tipo==='familiar'?'Administrar plan':'Cambiar contraseña'}</button>`;
+    html += `<button class="acc-btn" onclick="abrirGestionarPlataforma(${nombreArg})">🔧 ${gestion.tipo==='familiar'?'Administrar plan':'Cambiar contraseña'}</button>`;
   }
   // Botón "Editar datos" → correo y/o contraseña.
-  html += `<button class="acc-btn" onclick="abrirEditarCuenta('${nombreSeguro}')">✏️ Editar datos</button>`;
+  html += `<button class="acc-btn" onclick="abrirEditarCuenta(${nombreArg})">✏️ Editar datos</button>`;
   // Botón "Avisar clientes" → solo para plataformas de contraseña (en familiar
   // no afecta a los demás, no hace falta avisar nada).
   if (esPassword) {
-    html += `<button class="acc-btn" onclick="abrirAvisarCuenta('${nombreSeguro}')">📲 Avisar nueva clave</button>`;
+    html += `<button class="acc-btn" onclick="abrirAvisarCuenta(${nombreArg})">📲 Avisar nueva clave</button>`;
   }
   html += '</div>';
   // Eliminar va abajo, separado, en rojo (acción destructiva).
-  html += `<button class="delete-acc-btn" style="width:100%;margin-top:10px;padding:9px;" onclick="confirmarEliminarCuenta('${nombreSeguro}')">🗑 Eliminar esta cuenta</button>`;
+  html += `<button class="delete-acc-btn" style="width:100%;margin-top:10px;padding:9px;" onclick="confirmarEliminarCuenta(${nombreArg})">🗑 Eliminar esta cuenta</button>`;
   return html;
 }
 
@@ -4071,31 +4451,31 @@ function renderConfig() {
       <div style="display:flex;flex-direction:column;gap:8px;" id="lista-paquetes">
         ${paquetes.map(([nombre, datos], i) => `
           <div class="cuenta-card" style="padding:13px 15px;">
-            <div style="font-size:13px;font-weight:600;margin-bottom:9px;">${nombre}${(datos.meses||1)>1?` <span style="font-size:11px;color:var(--violet2);font-weight:700;">📆 ${datos.meses} meses</span>`:''}</div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:9px;">${esc(nombre)}${(datos.meses||1)>1?` <span style="font-size:11px;color:var(--violet2);font-weight:700;">📆 ${datos.meses} meses</span>`:''}</div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
               <div>
                 <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Precio público</div>
                 <input type="number" class="form-input" style="padding:7px 9px;font-size:13px;"
                   id="paq-precio-${i}" value="${datos.precio}"
-                  onchange="actualizarPaquete(${i},'${nombre.replace(/'/g,"")}')">
+                  onchange="actualizarPaquete(${i})">
               </div>
               <div>
                 <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Gan. amigo</div>
                 <input type="number" class="form-input" style="padding:7px 9px;font-size:13px;"
                   id="paq-amigo-${i}" value="${datos.gananciaAmigo}"
-                  onchange="actualizarPaquete(${i},'${nombre.replace(/'/g,"")}')">
+                  onchange="actualizarPaquete(${i})">
               </div>
               <div>
                 <div style="font-size:10px;color:var(--text3);text-transform:uppercase;margin-bottom:4px;">Tu ganancia</div>
                 <input type="number" class="form-input" style="padding:7px 9px;font-size:13px;"
                   id="paq-neta-${i}" value="${datos.gananciaNeta}"
-                  onchange="actualizarPaquete(${i},'${nombre.replace(/'/g,"")}')">
+                  onchange="actualizarPaquete(${i})">
               </div>
             </div>
             <div style="margin-top:9px;display:flex;align-items:center;gap:8px;">
               <div style="font-size:10px;color:var(--text3);text-transform:uppercase;">Duración</div>
               <select class="form-select" style="padding:6px 9px;font-size:13px;width:auto;flex:1;max-width:160px;"
-                id="paq-meses-${i}" onchange="actualizarPaquete(${i},'${nombre.replace(/'/g,"")}')">
+                id="paq-meses-${i}" onchange="actualizarPaquete(${i})">
                 ${[1,2,3,6,12].map(m=>`<option value="${m}"${(datos.meses||1)==m?' selected':''}>${m} ${m===1?'mes':'meses'}</option>`).join('')}
               </select>
             </div>
@@ -4298,6 +4678,8 @@ async function congelarClientesActivos() {
 }
 
 function actualizarPaquete(idx, nombre) {
+  nombre = nombre || Object.keys(PAQUETES_GANANCIA)[idx];
+  if (!nombre || !PAQUETES_GANANCIA[nombre]) { toast('No se encontró el combo a editar', 'error'); return; }
   const precio = parseFloat(document.getElementById('paq-precio-'+idx).value)||0;
   const amigo = parseFloat(document.getElementById('paq-amigo-'+idx).value)||0;
   const neta = parseFloat(document.getElementById('paq-neta-'+idx).value)||0;
@@ -4318,7 +4700,8 @@ function actualizarPaquete(idx, nombre) {
     // (el backend no las borra si no se envían).
     const plats = Array.isArray(PAQUETES_GANANCIA[nombre].plataformas) ? PAQUETES_GANANCIA[nombre].plataformas.join(',') : '';
     postDatos({accion:'agregarCombo',key:APP_KEY,nombre,precio,gananciaAmigo:amigo,gananciaNeta:neta,meses,plataformas:plats})
-      .then(()=>{
+      .then(res=>{
+        if (!res || res.status !== 'ok') throw new Error((res&&res.message)||'No se pudo guardar en Sheets');
         toast('Combo actualizado');
         // Refresca el historial de cambios YA, sin esperar a un nuevo login —
         // así el panel "Novedades del catálogo" muestra este cambio al toque.
@@ -4338,6 +4721,7 @@ function actualizarComision(vendedorKey) {
   // Persistir en el backend (hoja config_comisiones) para que el corte
   // mensual automático use el % correcto, no solo este navegador.
   postDatos({accion:'guardarComision',key:APP_KEY,vendedor:vendedorKey,porcentaje:pct})
+    .then(res=>{ if(!res || res.status!=='ok') throw new Error((res&&res.message)||'Error'); })
     .catch(()=>{ toast('No se pudo sincronizar el % con el servidor', 'error'); });
 }
 
@@ -4429,6 +4813,15 @@ function cargarConfigLocal() {
     const p = localStorage.getItem('config_paquetes');
     if (p) PAQUETES_GANANCIA = {...PAQUETES_GANANCIA_DEFAULT, ...JSON.parse(p)};
   } catch(e) {}
+  // Un navegador compartido pudo guardar antes el margen de una sesión admin.
+  // Al entrar como vendedor se elimina de memoria antes de pintar cualquier UI.
+  if (MI_ROL && MI_ROL !== 'admin') {
+    Object.keys(PAQUETES_GANANCIA).forEach(k=>{ PAQUETES_GANANCIA[k].gananciaNeta = 0; });
+    const miKey=(MI_VENDEDOR||'').toLowerCase();
+    const miPct=COMISIONES[miKey]!==undefined?COMISIONES[miKey]:100;
+    COMISIONES={};
+    if(miKey) COMISIONES[miKey]=miPct;
+  }
   poblarSelectsVendedores_();
 }
 
@@ -4457,7 +4850,14 @@ function aplicarCombosDesdeFilas_(filas) {
     const meses = Math.max(1, parseInt(f['meses'])||1);
     if (nombre && !isNaN(precio)) {
       PAQUETES_GANANCIA[nombre] = { precio, gananciaAmigo: isNaN(amigo)?0:amigo, gananciaNeta: isNaN(neta)?0:neta, meses };
-      if (plataformas && plataformas.length) PAQUETES_GANANCIA[nombre].plataformas = plataformas;
+      if (plataformas && plataformas.length) {
+        PAQUETES_GANANCIA[nombre].plataformas = plataformas;
+      } else if (PAQUETES_GANANCIA_DEFAULT[nombre] && PAQUETES_GANANCIA_DEFAULT[nombre].plataformas) {
+        // La hoja 'combos' no trae plataformas para este combo pero el catálogo
+        // de fábrica sí las conoce: se conservan, para no caer al detector por
+        // nombre (que puede adivinar mal, ej. "Crunchyroll (1 disp)").
+        PAQUETES_GANANCIA[nombre].plataformas = PAQUETES_GANANCIA_DEFAULT[nombre].plataformas.slice();
+      }
     }
   });
 }
@@ -4546,6 +4946,7 @@ function guardarNuevoCombo() {
 
   postDatos({accion:'agregarCombo', key:APP_KEY, nombre, precio, gananciaAmigo:amigo, gananciaNeta:neta, meses, plataformas:plataformasSeleccionadas.join(',')})
     .then(res=>{
+      if (!res || res.status !== 'ok') throw new Error((res&&res.message)||'No se pudo guardar en Sheets');
       status.innerHTML = '<div class="success-box"><p>✅ Combo guardado y disponible para usar</p></div>';
       toast('Combo "'+nombre+'" agregado');
       document.getElementById('ncb-nombre').value='';
@@ -4656,17 +5057,51 @@ function abrirRenovar(id) {
   const selPaq = document.getElementById('renovar-nuevo-paquete');
   selPaq.innerHTML = '<option value="">Mantener el mismo combo</option>' +
     Object.entries(PAQUETES_GANANCIA).map(([nombre,d])=>
-      `<option value="${nombre}|${d.precio}">${nombre} — $${d.precio}${d.meses>1?' · '+d.meses+' meses':''}</option>`).join('');
+      `<option value="${esc(nombre)}|${d.precio}">${esc(nombre)} — $${d.precio}${d.meses>1?' · '+d.meses+' meses':''}</option>`).join('');
   selPaq.value = '';
+  document.getElementById('renovar-cuentas-grupo').style.display = 'none';
+  document.getElementById('renovar-cuentas-selects').innerHTML = '';
   document.getElementById('renovar-pago').value = 'PAGADO';
   document.getElementById('renovar-status').innerHTML = '';
   document.getElementById('btn-renovar').disabled = false;
   document.getElementById('btn-renovar').textContent = 'Confirmar renovación';
+  // La duración arranca en la base del combo actual del cliente.
+  const baseMesesRen = mesesCombo(c.paquete);
+  const selMesesRen = document.getElementById('renovar-meses');
+  selMesesRen.value = [...selMesesRen.options].some(o=>parseInt(o.value)===baseMesesRen) ? String(baseMesesRen) : '1';
   renovarOpId = nuevoOpId();
   const hoy = hoyInputLocal();
   document.getElementById('renovar-inicio').value = hoy;
   calcularRenovacionRenovar();
   document.getElementById('modal-renovar').classList.add('open');
+}
+
+function cambioPaqueteRenovar_() {
+  const id = document.getElementById('renovar-id').value;
+  const c = todosClientes.find(x=>x.id===id);
+  const selVal = document.getElementById('renovar-nuevo-paquete').value;
+  const grupo = document.getElementById('renovar-cuentas-grupo');
+  if (!c || !selVal) {
+    grupo.style.display='none';
+    document.getElementById('renovar-cuentas-selects').innerHTML='';
+    calcularRenovacionRenovar();
+    return;
+  }
+  const paqueteNuevo = selVal.split('|')[0];
+  grupo.style.display='block';
+  const actuales=(c.cuenta||'').split(',').map(s=>s.trim()).filter(Boolean);
+  cargarCuentasDisponibles(paqueteNuevo,'renovar-cuentas-selects','renovar-cuenta-plat',actuales);
+  calcularRenovacionRenovar();
+}
+
+function escalarTotalCliente_(totalGuardado, c, paqueteNuevo, mesesNuevos) {
+  const datosAnt = buscarDatosCombo_(c.paquete);
+  const datosNuevo = buscarDatosCombo_(paqueteNuevo);
+  const baseAnt = datosAnt ? Math.max(1, parseInt(datosAnt.meses)||1) : 1;
+  const factorAnt = Math.max(1, parseInt(c.meses)||baseAnt) / baseAnt;
+  const baseNuevo = datosNuevo ? Math.max(1, parseInt(datosNuevo.meses)||1) : 1;
+  const factorNuevo = Math.max(1, parseInt(mesesNuevos)||baseNuevo) / baseNuevo;
+  return (parseFloat(totalGuardado)||0) / factorAnt * factorNuevo;
 }
 
 // ¿Este cliente conserva su precio/ganancia viejos en ESTA renovación? Solo
@@ -4690,22 +5125,23 @@ function calcularRenovacionRenovar() {
   // Combo del nuevo ciclo: el elegido (upgrade) o el mismo de antes.
   const selVal = document.getElementById('renovar-nuevo-paquete').value;
   const paqueteParaGanancia = selVal ? selVal.split('|')[0] : c.paquete;
-  // El vencimiento depende de la duración de ESE combo (30 días por mes).
-  const meses = mesesCombo(paqueteParaGanancia);
-  const d = fechaInputLocal(inicio); if(!d) return; d.setMonth(d.getMonth()+meses);
+  // El vencimiento depende de la duración ELEGIDA del ciclo (por defecto, la
+  // base del combo; más si el cliente pagó varios meses de un jalón).
+  const fmRen = factorMesesVenta_('renovar-meses', paqueteParaGanancia);
+  const d = fechaInputLocal(inicio); if(!d) return; d.setMonth(d.getMonth()+fmRen.meses);
   document.getElementById('renovar-fecha-renovacion').value = formatoDDMMYYYY(d);
 
   const protegido = clientePrecioProtegido_(c, !!selVal);
   let gananciaNueva;
   if (protegido) {
-    gananciaNueva = montoBaseCliente_(c);
+    gananciaNueva = escalarTotalCliente_(montoBaseCliente_(c), c, paqueteParaGanancia, fmRen.meses);
   } else {
-    gananciaNueva = calcularGananciaParaCliente_(paqueteParaGanancia, c.vendedor);
+    gananciaNueva = calcularGananciaParaCliente_(paqueteParaGanancia, c.vendedor) * fmRen.factor;
     // Si el combo (el que se mantiene, o el elegido para upgrade) no está en
     // el catálogo local — nombre viejo, o catálogo desactualizado en esta
     // sesión — usa la ganancia que ya tiene guardada el cliente. Nunca
     // mostrar/mandar $0 por un combo que simplemente no se encontró.
-    if (!buscarDatosCombo_(paqueteParaGanancia)) gananciaNueva = montoBaseCliente_(c);
+    if (!buscarDatosCombo_(paqueteParaGanancia)) gananciaNueva = escalarTotalCliente_(montoBaseCliente_(c), c, paqueteParaGanancia, fmRen.meses);
   }
   document.getElementById('renovar-ganancia-nueva').textContent = '$'+gananciaNueva.toFixed(2);
   const nota = document.getElementById('renovar-protegido-nota');
@@ -4734,6 +5170,7 @@ function calcularGananciaParaCliente_(nombrePaquete, vendedor) {
   if (vendedorLower === 'yo') return gananciaMia + gananciaAmigo;
   const pct = COMISIONES[vendedorLower] !== undefined ? COMISIONES[vendedorLower] : 100;
   const comision = gananciaAmigo * (pct/100);
+  if (MI_ROL !== 'admin') return comision;
   return gananciaMia + (gananciaAmigo - comision);
 }
 
@@ -4752,29 +5189,51 @@ function guardarRenovacion() {
   const paqueteNuevo = selVal ? selVal.split('|')[0] : '';
   const precioNuevo  = selVal ? selVal.split('|')[1] : '';
   const paqueteCiclo = paqueteNuevo || c.paquete;
+  let cuentasUpgrade;
+  if (paqueteNuevo) {
+    const selectsUpgrade=Array.from(document.querySelectorAll('.renovar-cuenta-plat'));
+    const requeridas=detectarPlataformas(paqueteCiclo);
+    if (selectsUpgrade.length!==requeridas.length || selectsUpgrade.some(s=>!s.value)) {
+      document.getElementById('renovar-status').innerHTML='<div class="error-msg">⚠️ Elige una cuenta con slot para cada servicio del combo nuevo.</div>';
+      return;
+    }
+    cuentasUpgrade=selectsUpgrade.map(s=>s.value).join(', ');
+  }
 
   // Precio protegido: se manda lo mismo que el cliente ya tenía, para que lo
   // que se ve en la vista previa sea justo lo que se guarda (el servidor lo
   // vuelve a verificar de todos modos, esto es solo para no mostrar un número
   // que luego no coincida).
+  // Duración elegida del ciclo (3 meses = 3× precio, ganancia y comisión).
+  const fmRen = factorMesesVenta_('renovar-meses', paqueteCiclo);
   const protegido = clientePrecioProtegido_(c, !!paqueteNuevo);
   let gananciaNueva, precioFinal;
   if (protegido) {
-    gananciaNueva = montoBaseCliente_(c);
-    precioFinal = c.precio;
+    gananciaNueva = escalarTotalCliente_(montoBaseCliente_(c), c, paqueteCiclo, fmRen.meses);
+    precioFinal = precioBonito_(escalarTotalCliente_(c.precio, c, paqueteCiclo, fmRen.meses));
   } else {
-    gananciaNueva = calcularGananciaParaCliente_(paqueteCiclo, c.vendedor);
+    gananciaNueva = calcularGananciaParaCliente_(paqueteCiclo, c.vendedor) * fmRen.factor;
     // Mismo fallback que en la vista previa: si el combo (el que se mantiene,
     // o el elegido para upgrade) no está en el catálogo local, conserva la
     // ganancia ya guardada del cliente en vez de mandar $0.
-    if (!buscarDatosCombo_(paqueteCiclo)) gananciaNueva = montoBaseCliente_(c);
-    precioFinal = precioNuevo; // vacío = mantener el mismo
+    if (!buscarDatosCombo_(paqueteCiclo)) gananciaNueva = escalarTotalCliente_(montoBaseCliente_(c), c, paqueteCiclo, fmRen.meses);
+    // Precio del ciclo: el del combo elegido (upgrade) o, si se mantiene el
+    // mismo pero pagó varios meses, el precio del catálogo × factor. Vacío =
+    // que el backend conserve el que ya tenía.
+    const datosCombo = buscarDatosCombo_(paqueteCiclo);
+    if (paqueteNuevo) {
+      precioFinal = precioBonito_((parseFloat(precioNuevo)||0) * fmRen.factor);
+    } else if (fmRen.factor !== 1 && datosCombo) {
+      precioFinal = precioBonito_((datosCombo.precio||0) * fmRen.factor);
+    } else {
+      precioFinal = '';
+    }
   }
 
   // accion 'renovarCliente': el backend extiende fechas Y anota el abono de
   // comisión en el libro. (Editar normal NO toca el libro, a propósito.)
   const datosPaqCiclo = buscarDatosCombo_(paqueteCiclo);
-  const gananciaAmigoRenovar = datosPaqCiclo ? (datosPaqCiclo.gananciaAmigo||0) : 0;
+  const gananciaAmigoRenovar = (datosPaqCiclo ? (datosPaqCiclo.gananciaAmigo||0) : 0) * fmRen.factor;
   const datos = {
     accion: 'renovarCliente', key: APP_KEY,
     id: c.id,
@@ -4785,9 +5244,10 @@ function guardarRenovacion() {
     gananciaAmigo: gananciaAmigoRenovar.toFixed(2),
     paquete: paqueteNuevo,   // vacío = mantener el mismo
     precio: precioFinal,
-    meses: mesesCombo(paqueteCiclo),
+    meses: fmRen.meses,
     opId: renovarOpId,
   };
+  if (cuentasUpgrade !== undefined) datos.cuenta = cuentasUpgrade;
 
   const btn = document.getElementById('btn-renovar');
   btn.disabled = true; btn.textContent = 'Guardando...';
@@ -4801,8 +5261,12 @@ function guardarRenovacion() {
         setTimeout(() => { cerrarModal('modal-renovar'); cargarDatos(); }, 1000);
       } else throw new Error(res.message);
     })
-    .catch(() => {
-      document.getElementById('renovar-status').innerHTML = '<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>';
+    .catch(err => {
+      // Se muestra el motivo REAL del servidor (ej. "ya tiene una renovación
+      // hace menos de 15 días"), no un error genérico que obligue a adivinar.
+      const msg = err && err.message && err.message !== 'auth' && !/^http /.test(err.message)
+        ? err.message : 'Error al guardar. Intenta de nuevo.';
+      document.getElementById('renovar-status').innerHTML = '<div class="error-msg">⚠️ '+esc(msg)+'</div>';
       btn.disabled = false; btn.textContent = 'Confirmar renovación';
     });
 }
@@ -4830,7 +5294,7 @@ function abrirEditar(id) {
   const cuentasActuales = (c.cuenta||'').split(',').map(s=>s.trim()).filter(Boolean);
   if (paqueteOpt) {
     document.getElementById('e-paquete').value = paqueteOpt.value;
-    document.getElementById('e-precio').value = '$' + paqueteOpt.value.split('|')[1];
+    document.getElementById('e-precio').value = '$' + (c.precio || paqueteOpt.value.split('|')[1]);
     cargarCuentasDisponibles(c.paquete, 'e-cuentas-selects', 'e-cuenta-plat', cuentasActuales);
   } else {
     document.getElementById('e-paquete').value = '';
@@ -4851,7 +5315,9 @@ function actualizarPrecioEditar() {
     return;
   }
   const partes = sel.split('|');
-  document.getElementById('e-precio').value = '$' + partes[1];
+  const cEd = todosClientes.find(x=>x.id===document.getElementById('e-id').value);
+  const mesesEd = Math.max(1, Math.min(12, parseInt(cEd && cEd.meses)||mesesCombo(partes[0])));
+  document.getElementById('e-precio').value = '$' + precioBonito_((parseFloat(partes[1])||0) * (mesesEd/mesesCombo(partes[0])));
   // Si el paquete cambió a uno distinto al que tenía el cliente, las cuentas
   // viejas ya no aplican necesariamente — recargamos sin preselección y que
   // el vendedor elija de nuevo según la nueva plataforma.
@@ -4872,11 +5338,27 @@ async function guardarEdicion() {
   const id = document.getElementById('e-id').value;
   const sel = document.getElementById('e-paquete').value;
   const vendedorSel = document.getElementById('e-vendedor').value;
+  const cOrig = todosClientes.find(x => x.id === id);
+  const nombreEd = document.getElementById('e-cliente').value.trim();
+  if (!nombreEd) {
+    document.getElementById('editar-status').innerHTML = '<div class="error-msg">⚠️ El nombre del cliente es obligatorio.</div>';
+    return;
+  }
+
+  // Si se eligió un combo del catálogo, debe quedar una cuenta seleccionada por
+  // cada plataforma. Esto también cubre upgrades a combos con más servicios.
+  const selectsEd = Array.from(document.querySelectorAll('.e-cuenta-plat'));
+  if (sel) {
+    const platsEd = detectarPlataformas(sel.split('|')[0]);
+    if (selectsEd.length !== platsEd.length || selectsEd.some(s=>!s.value)) {
+      document.getElementById('editar-status').innerHTML = '<div class="error-msg">⚠️ Faltan cuentas o slots para completar el combo. No se guardó ningún cambio.</div>';
+      return;
+    }
+  }
 
   // Aviso: cambiar de vendedor NO mueve solo la comisión ya abonada en el libro.
   // Editar es corrección de datos, no toca dinero. Si de verdad cambió el dueño
   // de la venta, hay que corregir saldos con un Ajuste manual a cada uno.
-  const cOrig = todosClientes.find(x => x.id === id);
   if (cOrig && (cOrig.vendedor||'').toLowerCase() !== (vendedorSel||'').toLowerCase()) {
     const ok = await confirmar('Vas a cambiar el vendedor de "'+(cOrig.vendedor||'—')+'" a "'+vendedorSel+'".\n\nOjo: la comisión que ya se le abonó al vendedor anterior NO se transfiere sola. Si hace falta, corrígelo después con un Ajuste manual (⚖️) en Ganancias.\n\n¿Continuar?');
     if (!ok) return;
@@ -4889,8 +5371,12 @@ async function guardarEdicion() {
   let gananciaRecalculada = null;
   if (sel) {
     const partes = sel.split('|');
-    const gananciaAmigo = parseFloat(partes[2]);
-    const gananciaMia = parseFloat(partes[3]);
+    // Editar el combo conserva la duración ya vendida. Una venta de 3 meses
+    // que recibe un upgrade sigue siendo de 3 meses y ajusta toda la diferencia.
+    const mesesEd = Math.max(1, Math.min(12, parseInt(cOrig && cOrig.meses)||mesesCombo(partes[0])));
+    const factorEd = mesesEd / mesesCombo(partes[0]);
+    const gananciaAmigo = parseFloat(partes[2]) * factorEd;
+    const gananciaMia = parseFloat(partes[3]) * factorEd;
     if (!isNaN(gananciaAmigo) && !isNaN(gananciaMia)) {
       const vendedorLower = vendedorSel.toLowerCase();
       if (vendedorLower === 'yo') {
@@ -4906,11 +5392,11 @@ async function guardarEdicion() {
   const datos = {
     accion: 'editarCliente', key:APP_KEY,
     id,
-    cliente: document.getElementById('e-cliente').value.trim(),
+    cliente: nombreEd,
     contacto: document.getElementById('e-contacto').value.trim(),
     paquete: sel ? sel.split('|')[0] : '',
-    precio: sel ? sel.split('|')[1] : document.getElementById('e-precio').value.replace('$',''),
-    cuenta: Array.from(document.querySelectorAll('.e-cuenta-plat')).map(s=>s.value).filter(Boolean).join(', '),
+    precio: sel ? precioBonito_((parseFloat(sel.split('|')[1])||0) * ((Math.max(1,parseInt(cOrig&&cOrig.meses)||1))/mesesCombo(sel.split('|')[0]))) : document.getElementById('e-precio').value.replace('$',''),
+    cuenta: selectsEd.map(s=>s.value).filter(Boolean).join(', '),
     inicio: document.getElementById('e-inicio').value ? formatoDDMMYYYY(fechaInputLocal(document.getElementById('e-inicio').value)) : '',
     renovacion: document.getElementById('e-renovacion').value,
     vendedor: vendedorSel,
@@ -4922,22 +5408,35 @@ async function guardarEdicion() {
     datos.ganancia = gananciaRecalculada.toFixed(2);
   }
   if (sel) {
-    datos.meses = mesesCombo(sel.split('|')[0]);   // actualiza la duración si cambió de combo
+    datos.meses = Math.max(1, Math.min(12, parseInt(cOrig && cOrig.meses)||mesesCombo(sel.split('|')[0])));
   }
   const btn = document.getElementById('btn-editar');
   btn.disabled = true; btn.textContent = 'Guardando...';
   postDatos(datos)
     .then(res => {
       if (res.status === 'ok') {
-        document.getElementById('editar-status').innerHTML = '<div class="success-box"><p>✅ Cambios guardados</p></div>';
+        // Si el combo cambió a mitad de ciclo, el servidor abona/descuenta la
+        // DIFERENCIA de comisión solo (ver ajustarComisionPorCambioCombo_ en
+        // el backend) y aquí se avisa cuánto fue, para que no parezca que la
+        // comisión "no se movió".
+        let msgOk = '✅ Cambios guardados';
+        if (res.ajusteComision && res.ajusteComision.monto) {
+          const a = res.ajusteComision;
+          const quien = a.vendedor === 'yo' ? 'tu ganancia' : 'la comisión de ' + nombreVendedorUI_(a.vendedor);
+          msgOk += `<br><small>${a.monto > 0 ? 'Se sumó' : 'Se descontó'} $${Math.abs(a.monto).toFixed(2)} a ${esc(quien)} por el cambio de combo.</small>`;
+          toast((a.monto > 0 ? '+$' : '-$') + Math.abs(a.monto).toFixed(2) + ' de diferencia por cambio de combo', 'success', '⚖️');
+        } else {
+          toast('Cambios guardados');
+        }
+        document.getElementById('editar-status').innerHTML = '<div class="success-box"><p>'+msgOk+'</p></div>';
         btn.textContent = 'Guardado ✓';
-        toast('Cambios guardados');
         marcarDatosSucios();
-        setTimeout(() => { cerrarModal('modal-editar'); cargarDatos(); }, 1000);
+        setTimeout(() => { cerrarModal('modal-editar'); cargarDatos(); }, res.ajusteComision ? 1800 : 1000);
       } else throw new Error(res.message);
     })
     .catch(err => {
-      document.getElementById('editar-status').innerHTML = `<div class="error-msg">⚠️ Error al guardar. Intenta de nuevo.</div>`;
+      const msg = err && err.message && err.message !== 'auth' && !/^http /.test(err.message) ? err.message : 'Error al guardar. Intenta de nuevo.';
+      document.getElementById('editar-status').innerHTML = `<div class="error-msg">⚠️ ${esc(msg)}</div>`;
       btn.disabled = false; btn.textContent = 'Guardar cambios';
     });
 }
