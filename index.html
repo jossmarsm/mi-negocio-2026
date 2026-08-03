@@ -701,6 +701,7 @@ body {
   <div class="nav-tab" id="tab-catalogo" onclick="mostrarSeccion('catalogo', this)">Catálogo</div>
   <div class="nav-tab" id="tab-ganancias" onclick="mostrarSeccion('ganancias', this)">Ganancias</div>
   <div class="nav-tab" id="tab-comprobantes" onclick="mostrarSeccion('comprobantes', this)">Comprobantes</div>
+  <div class="nav-tab" id="tab-autorizar" onclick="mostrarSeccion('autorizar', this)" style="display:none;">Autorizar<span id="badge-autorizar" style="display:none;background:var(--red);color:#fff;font-size:10px;font-weight:800;border-radius:99px;padding:1px 6px;margin-left:5px;vertical-align:middle;">0</span></div>
   <div class="nav-tab" id="tab-historial" onclick="mostrarSeccion('historial', this)">Historial</div>
   <div class="nav-tab" id="tab-config" onclick="mostrarSeccion('config', this)">Configuración</div>
 </div>
@@ -816,6 +817,35 @@ body {
     <div id="ganancias-historial" style="display:none;">
       <div id="historial-mensual-content"><div class="loading">Cargando historial...</div></div>
     </div>
+  </div>
+</div>
+
+<!-- SECCIÓN AUTORIZAR (cola de cambios de vendedores) -->
+<div id="sec-autorizar" class="section-hidden">
+  <div class="content" style="padding-top:20px;">
+    <div style="margin-bottom:16px;">
+      <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk';" id="autorizar-titulo">Cambios por autorizar</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-top:3px;" id="autorizar-sub">Nada se aplica hasta que tú lo apruebes</div>
+    </div>
+    <div id="autorizar-content"><div class="loading">Cargando...</div></div>
+  </div>
+</div>
+
+<!-- MODAL RECHAZAR SOLICITUD -->
+<div class="modal-overlay" id="modal-rechazar">
+  <div class="modal" style="max-width:380px;">
+    <div class="modal-header">
+      <div class="modal-title">Rechazar cambio</div>
+      <button class="modal-close" onclick="cerrarModal('modal-rechazar')">✕</button>
+    </div>
+    <p style="color:var(--text2);font-size:13.5px;line-height:1.5;margin-bottom:14px;" id="rechazar-resumen"></p>
+    <div class="form-group">
+      <label class="form-label">Motivo (opcional, lo verá el vendedor)</label>
+      <input class="form-input" id="rechazar-motivo" placeholder="Ej. ya lo registré yo, el monto no cuadra...">
+    </div>
+    <input type="hidden" id="rechazar-id">
+    <button class="btn-primary" id="btn-rechazar-confirm" onclick="confirmarRechazo()" style="background:linear-gradient(135deg,#f87171,#ef4444);box-shadow:0 6px 18px -4px rgba(248,113,113,0.5);">Rechazar cambio</button>
+    <button class="btn-secondary" onclick="cerrarModal('modal-rechazar')">Cancelar</button>
   </div>
 </div>
 
@@ -1680,7 +1710,184 @@ function mostrarSeccion(sec, btn) {
     else { document.getElementById('comprobantes-content').innerHTML = '<div class="loading">Cargando comprobantes...</div>'; cargarComprobantes().then(renderComprobantes); }
   }
   if (sec==='historial') cargarActividad();
+  if (sec==='autorizar') cargarSolicitudes();
   if (sec==='config') renderConfig();
+}
+
+// ===== Cola de autorizaciones (hoja 'solicitudes') =====
+// Con el modo aprobación encendido, lo que manda un vendedor (renovar, editar,
+// archivar, comprobantes) NO se aplica: llega aquí y espera el visto bueno del
+// admin. El admin ve toda la cola; un vendedor ve solo lo suyo, para saber qué
+// está esperando y qué le rechazaron.
+let todasSolicitudes = [];
+let solicitudesCargadas = false;
+let MI_MODO_APROBACION = true;
+
+const SOLICITUD_INFO = {
+  renovarCliente:  ['🔁', 'Renovación'],
+  editarCliente:   ['✏️', 'Edición de cliente'],
+  archivarCliente: ['🗂', 'Archivar cliente'],
+  comprobante:     ['📎', 'Comprobante de pago'],
+};
+
+function solicitudesPendientes_() {
+  return todasSolicitudes.filter(s => s.estado === 'PENDIENTE');
+}
+
+// Badge rojo en la pestaña: lo que falta por revisar, visible desde cualquier
+// pantalla sin tener que entrar a buscarlo.
+function actualizarBadgeAutorizar_() {
+  const badge = document.getElementById('badge-autorizar');
+  const tab = document.getElementById('tab-autorizar');
+  if (!badge || !tab) return;
+  // La pestaña solo aparece si hay algo que mostrar: para el admin siempre que
+  // el modo esté activo; para un vendedor, solo si tiene solicitudes suyas.
+  const visible = MI_ROL === 'admin' ? MI_MODO_APROBACION : todasSolicitudes.length > 0;
+  tab.style.display = visible ? '' : 'none';
+  const n = solicitudesPendientes_().length;
+  badge.style.display = n > 0 ? '' : 'none';
+  badge.textContent = n > 99 ? '99+' : n;
+}
+
+function cargarSolicitudes(forzar) {
+  if (solicitudesCargadas && !forzar) { renderSolicitudes(); return Promise.resolve(); }
+  return postDatos({accion:'listarSolicitudes', key:APP_KEY})
+    .then(res => {
+      todasSolicitudes = res.solicitudes || [];
+      if (res.modoAprobacion !== undefined) MI_MODO_APROBACION = !!res.modoAprobacion;
+      solicitudesCargadas = true;
+      renderSolicitudes();
+      actualizarBadgeAutorizar_();
+      actualizarNotificaciones();
+    })
+    .catch(() => {
+      const cont = document.getElementById('autorizar-content');
+      if (cont) cont.innerHTML = '<div class="error-msg">⚠️ No se pudo cargar. <a href="#" onclick="cargarSolicitudes(true);return false;" style="color:inherit;text-decoration:underline;">Reintentar</a></div>';
+    });
+}
+
+function renderSolicitudes() {
+  const cont = document.getElementById('autorizar-content');
+  if (!cont) return;
+  const esAdmin = MI_ROL === 'admin';
+  document.getElementById('autorizar-titulo').textContent = esAdmin ? 'Cambios por autorizar' : 'Mis cambios enviados';
+  document.getElementById('autorizar-sub').textContent = esAdmin
+    ? 'Nada de lo que hacen tus vendedores se aplica hasta que tú lo apruebes'
+    : 'Lo que mandaste a autorización y en qué va cada cosa';
+
+  const pendientes = solicitudesPendientes_();
+  const resueltas = todasSolicitudes.filter(s => s.estado !== 'PENDIENTE');
+
+  if (!todasSolicitudes.length) {
+    cont.innerHTML = `<div class="empty">
+      <div class="empty-icon">✅</div>
+      <div class="empty-title">${esAdmin ? 'Nada pendiente por revisar' : 'No tienes cambios enviados'}</div>
+      <div class="empty-sub">${esAdmin ? 'Cuando un vendedor renueve, edite o suba un comprobante, te aparecerá aquí para aprobarlo.' : 'Cuando renueves o edites a un cliente, el cambio se manda aquí para que el admin lo autorice.'}</div>
+    </div>`;
+    return;
+  }
+
+  const tarjeta = (s) => {
+    const info = SOLICITUD_INFO[s.accion] || ['•', s.accion];
+    const esPend = s.estado === 'PENDIENTE';
+    const colorEstado = s.estado === 'APROBADA' ? 'var(--green)' : (s.estado === 'RECHAZADA' ? 'var(--red)' : 'var(--amber)');
+    const bgEstado = s.estado === 'APROBADA' ? 'var(--green-bg)' : (s.estado === 'RECHAZADA' ? 'var(--red-bg)' : 'var(--amber-bg)');
+    const idArg = esc(JSON.stringify(s.id));
+    return `<div class="cuenta-card" style="padding:14px 16px;${esPend?'border-left:3px solid var(--amber);':''}">
+      <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;">
+        <div style="font-size:18px;line-height:1.2;">${info[0]}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13.5px;font-weight:700;">${info[1]}
+            <span style="font-size:10px;font-weight:800;color:${colorEstado};background:${bgEstado};padding:2px 7px;border-radius:99px;margin-left:4px;">${s.estado}</span>
+          </div>
+          <div style="font-size:12.5px;color:var(--text2);margin-top:4px;line-height:1.5;word-break:break-word;">${esc(s.resumen)}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:5px;">
+            ${esAdmin ? `Pedido por <strong>${esc(s.usuario)}</strong>` : 'Enviado'} · ${esc(s.fecha)} ${esc(s.hora)}
+            ${s.cliente_id ? ` · <span style="cursor:pointer;text-decoration:underline;" onclick="verDetalle(${esc(JSON.stringify(s.cliente_id))})">${esc(s.cliente_id)}</span>` : ''}
+          </div>
+          ${!esPend ? `<div style="font-size:11px;color:var(--text3);margin-top:3px;">${s.estado==='APROBADA'?'Aprobado':'Rechazado'} por ${esc(s.resuelta_por||'—')} · ${esc(s.fecha_resuelta||'')}${s.motivo?` · motivo: ${esc(s.motivo)}`:''}</div>` : ''}
+        </div>
+      </div>
+      ${esPend && esAdmin ? `<div style="display:flex;gap:8px;margin-top:10px;">
+        <button class="acc-btn" style="flex:1;background:var(--green-bg);border-color:rgba(52,211,153,0.35);color:var(--green);font-weight:700;padding:9px;" onclick="aprobarSolicitud(${idArg}, this)">✓ Aprobar</button>
+        <button class="acc-btn" style="flex:1;background:var(--red-bg);border-color:rgba(248,113,113,0.35);color:var(--red);font-weight:700;padding:9px;" onclick="abrirRechazar(${idArg})">✕ Rechazar</button>
+      </div>` : ''}
+      ${esPend && !esAdmin ? `<div style="font-size:11.5px;color:var(--amber);margin-top:6px;">⏳ Esperando que el admin lo autorice — todavía no se aplicó.</div>` : ''}
+    </div>`;
+  };
+
+  let html = '';
+  if (pendientes.length) {
+    html += `<div style="font-size:11.5px;font-weight:800;color:var(--amber);text-transform:uppercase;letter-spacing:0.06em;margin:0 0 8px;">⏳ Pendientes (${pendientes.length})</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">${pendientes.map(tarjeta).join('')}</div>`;
+  }
+  if (resueltas.length) {
+    html += `<div style="font-size:11.5px;font-weight:800;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin:20px 0 8px;">Ya resueltas</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">${resueltas.map(tarjeta).join('')}</div>`;
+  }
+  cont.innerHTML = html;
+}
+
+function aprobarSolicitud(id, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Aplicando...'; }
+  postDatos({accion:'resolverSolicitud', key:APP_KEY, solicitudId:id, aprobar:true})
+    .then(res => {
+      if (res.status !== 'ok') throw new Error(res.message || 'No se pudo aprobar');
+      toast('Cambio aplicado', 'success', '✅');
+      // El cambio ya tocó datos reales: clientes, cuentas y ledger quedan viejos.
+      marcarDatosSucios();
+      cargarDatos();
+      cargarSolicitudes(true);
+    })
+    .catch(err => {
+      // Puede fallar legítimamente (ej. ya no hay slots): el servidor manda el
+      // motivo real y la solicitud SIGUE pendiente para que decidas.
+      toast(err.message || 'No se pudo aplicar', 'error');
+      cargarSolicitudes(true);
+    });
+}
+
+function abrirRechazar(id) {
+  const s = todasSolicitudes.find(x => x.id === id);
+  document.getElementById('rechazar-id').value = id;
+  document.getElementById('rechazar-motivo').value = '';
+  document.getElementById('rechazar-resumen').textContent = s ? s.resumen : '';
+  document.getElementById('btn-rechazar-confirm').disabled = false;
+  document.getElementById('btn-rechazar-confirm').textContent = 'Rechazar cambio';
+  document.getElementById('modal-rechazar').classList.add('open');
+}
+
+function confirmarRechazo() {
+  const id = document.getElementById('rechazar-id').value;
+  const motivo = document.getElementById('rechazar-motivo').value.trim();
+  const btn = document.getElementById('btn-rechazar-confirm');
+  btn.disabled = true; btn.textContent = 'Rechazando...';
+  postDatos({accion:'resolverSolicitud', key:APP_KEY, solicitudId:id, aprobar:false, motivo})
+    .then(res => {
+      if (res.status !== 'ok') throw new Error(res.message || 'No se pudo rechazar');
+      cerrarModal('modal-rechazar');
+      toast('Cambio rechazado — no se aplicó nada', 'success', '✕');
+      cargarSolicitudes(true);
+    })
+    .catch(err => {
+      toast(err.message || 'No se pudo rechazar', 'error');
+      btn.disabled = false; btn.textContent = 'Rechazar cambio';
+    });
+}
+
+// Respuesta común a cualquier acción que quedó en la cola en vez de aplicarse.
+// Se usa en renovar, editar, archivar y comprobantes para que el vendedor vea
+// SIEMPRE el mismo mensaje claro: se mandó, no se aplicó todavía.
+function avisoPendienteAprobacion_(contenedorId) {
+  const el = contenedorId ? document.getElementById(contenedorId) : null;
+  if (el) {
+    el.innerHTML = `<div class="success-box" style="background:var(--amber-bg);border-color:rgba(251,191,36,0.35);">
+      <p style="color:var(--amber);">⏳ Enviado para autorización</p>
+      <p style="font-size:12px;color:var(--text2);margin-top:4px;">El admin tiene que aprobarlo para que se aplique. Puedes ver en qué va desde la pestaña "Autorizar".</p>
+    </div>`;
+  }
+  toast('Enviado a autorización del admin', 'success', '⏳');
+  solicitudesCargadas = false;
 }
 
 // ===== Historial de actividad (hoja 'actividad') =====
@@ -1807,6 +2014,7 @@ function recargarVista() {
   if (seccionActual==='catalogo') { cuentasCargadas=false; cargarCatalogo(); }
   if (seccionActual==='ganancias') cargarGanancias();
   if (seccionActual==='historial') cargarActividad(true);
+  if (seccionActual==='autorizar') cargarSolicitudes(true);
 }
 
 // Marca como "sucia" la caché tras un cambio que afecta slots (cuentas) y/o el
@@ -1816,6 +2024,7 @@ function marcarDatosSucios() {
   cuentasCargadas = false;
   gananciasCargadas = false;
   actividadCargada = false; // el historial también quedó viejo tras un cambio
+  solicitudesCargadas = false;
   // El libro de comisiones en memoria también: sin esto, el "Historial de
   // ciclos" de la ficha y las notificaciones de dinero mostraban el libro
   // viejo hasta que el usuario entrara a Ganancias.
@@ -2046,6 +2255,18 @@ function calcularNotificaciones() {
   if (deben.length) out.push({ sev:'ambar', icon:'💵',
     titulo:`${deben.length} con pago pendiente`,
     detalle:'Aún no te han pagado este ciclo.', accion:()=>irAClientesFiltro('debe') });
+
+  // Cambios de vendedores esperando tu visto bueno — lo primero de la lista:
+  // hasta que los apruebes, esas renovaciones y ediciones no existen.
+  const pendAut = solicitudesPendientes_().length;
+  if (pendAut > 0) {
+    out.push({ sev:'rojo', icon:'✋',
+      titulo: MI_ROL === 'admin'
+        ? `${pendAut} cambio${pendAut!==1?'s':''} esperando tu autorización`
+        : `${pendAut} cambio${pendAut!==1?'s':''} tuyo${pendAut!==1?'s':''} sin autorizar`,
+      detalle: MI_ROL === 'admin' ? 'Nada de eso se aplicó todavía.' : 'El admin aún no los aprueba.',
+      accion:()=>irASeccion('autorizar') });
+  }
 
   // Cuentas llenas / por llenarse (solo admin — el vendedor no compra cuentas).
   if (MI_ROL === 'admin' && cuentasCargadas && todasCuentas.length) {
@@ -2639,7 +2860,7 @@ function verDetalle(id) {
       ${misComprobantes.slice().reverse().map(cp => `
         <div class="slot-row">
           <div class="slot-num" style="width:auto;color:var(--text2);">${esc(cp.fecha||'—')}</div>
-          <div class="slot-cliente" style="font-size:12px;">${esc(cp.paquete||'')}${cp.monto&&parseFloat(cp.monto)>0?' · $'+parseFloat(cp.monto).toFixed(2):''}</div>
+          <div class="slot-cliente" style="font-size:12px;">${esc(cp.paquete||'')}${cp.monto&&parseFloat(cp.monto)>0?' · $'+parseFloat(cp.monto).toFixed(2):''}${String(cp.estado||'').toUpperCase().trim()==='PENDIENTE'?' <span style="color:var(--amber);font-weight:700;">⏳ por validar</span>':(String(cp.estado||'').toUpperCase().trim()==='RECHAZADO'?' <span style="color:var(--red);font-weight:700;">✕ rechazado</span>':'')}</div>
           <a href="${esc(cp.drive_url)}" target="_blank" rel="noopener" style="font-size:12px;color:var(--blue);font-weight:700;">Ver</a>
         </div>`).join('')}
     </div>`;
@@ -2673,6 +2894,13 @@ function verDetalle(id) {
     ${repartoHTML}
     ${historialHTML}
     ${comprobantesHTML}
+    ${(() => {
+      // Aviso si este cliente ya tiene un cambio esperando autorización: evita
+      // que alguien lo vuelva a mandar creyendo que no se guardó.
+      const pend = solicitudesPendientes_().filter(s => s.cliente_id === c.id);
+      if (!pend.length) return '';
+      return `<div style="background:var(--amber-bg);border:1px solid rgba(251,191,36,0.35);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">⏳ <strong>${pend.length} cambio${pend.length!==1?'s':''} esperando autorización</strong><div style="font-size:12px;color:var(--text2);margin-top:3px;">${pend.map(s=>esc(s.resumen)).join('<br>')}</div></div>`;
+    })()}
     ${clientePrecioProtegido_(c, false) ? `<div style="background:var(--blue-bg);border:1px solid rgba(96,165,250,0.35);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--blue);">🔒 Precio protegido hasta ${esc(c.congeladoHasta)} — el aumento de precio aún no le aplica.</div>` : ''}
     ${c.notas ? `<div style="background:var(--amber-bg);border:1px solid rgba(251,191,36,0.3);border-radius:12px;padding:11px 14px;margin-bottom:12px;font-size:13px;color:var(--amber);">📝 <strong>Nota:</strong> ${esc(c.notas)}</div>` : ''}`;
   const esArchivado = c.estado_raw==='ARCHIVADO';
@@ -4196,16 +4424,24 @@ function renderComprobantes() {
     cont.innerHTML = `<div class="empty"><div class="empty-icon">📎</div><div class="empty-title">${q?'Sin resultados':'Sin comprobantes todavía'}</div><div class="empty-sub">${q?'Ninguno coincide con tu búsqueda.':'Se suben desde el botón "Subir comprobante" en la ficha de cada cliente.'}</div></div>`;
     return;
   }
-  cont.innerHTML = lista.map(cp => `
-    <div class="cuenta-card" style="padding:13px 16px;display:flex;align-items:center;gap:12px;">
+  cont.innerHTML = lista.map(cp => {
+    // Estado de validación: los que suben los vendedores llegan PENDIENTE y
+    // solo cuentan como buenos cuando el admin los valida. Sin la columna
+    // (comprobantes viejos) se tratan como validados de siempre.
+    const est = String(cp.estado||'').toUpperCase().trim();
+    const chip = est === 'PENDIENTE'
+      ? '<span style="font-size:10px;font-weight:800;color:var(--amber);background:var(--amber-bg);padding:2px 7px;border-radius:99px;">⏳ POR VALIDAR</span>'
+      : (est === 'RECHAZADO' ? '<span style="font-size:10px;font-weight:800;color:var(--red);background:var(--red-bg);padding:2px 7px;border-radius:99px;">✕ RECHAZADO</span>' : '');
+    return `
+    <div class="cuenta-card" style="padding:13px 16px;display:flex;align-items:center;gap:12px;${est==='PENDIENTE'?'border-left:3px solid var(--amber);':''}">
       <div style="flex:1;min-width:0;">
-        <div style="font-size:13.5px;font-weight:700;">${esc(cp.cliente_nombre||'—')}</div>
+        <div style="font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">${esc(cp.cliente_nombre||'—')} ${chip}</div>
         <div style="font-size:12px;color:var(--text2);margin-top:2px;">${esc(cp.paquete||'')}${MI_ROL==='admin'&&cp.vendedor?' · '+esc(cp.vendedor):''} · ${esc(cp.fecha||'')}</div>
       </div>
       ${cp.monto&&parseFloat(cp.monto)>0?`<div style="font-family:'Space Grotesk';font-weight:700;color:var(--green);white-space:nowrap;">$${parseFloat(cp.monto).toFixed(2)}</div>`:''}
       <a href="${esc(cp.drive_url)}" target="_blank" rel="noopener" class="wa-btn" style="background:var(--blue-bg);border-color:rgba(96,165,250,0.35);color:var(--blue);" title="Ver comprobante">👁️</a>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function abrirModalComprobante(clienteId) {
@@ -4310,11 +4546,21 @@ async function guardarComprobante() {
       archivo: base64, mimeType: mimeType, nombreArchivo: file.name
     });
     if (res.status === 'ok') {
-      status.innerHTML = '<div class="success-box"><p>✅ Comprobante guardado</p></div>';
-      toast('Comprobante subido a Drive', 'success', '📎');
+      // El archivo SÍ se guarda siempre (no tiene sentido perder la foto del
+      // pago); lo que espera autorización es darlo por bueno.
+      if (res.pendiente) {
+        status.innerHTML = `<div class="success-box" style="background:var(--amber-bg);border-color:rgba(251,191,36,0.35);">
+          <p style="color:var(--amber);">⏳ Comprobante subido — pendiente de validar</p>
+          <p style="font-size:12px;color:var(--text2);margin-top:4px;">Ya quedó guardado; el admin tiene que darlo por bueno.</p></div>`;
+        toast('Comprobante enviado a validación', 'success', '⏳');
+        solicitudesCargadas = false;
+      } else {
+        status.innerHTML = '<div class="success-box"><p>✅ Comprobante guardado</p></div>';
+        toast('Comprobante subido a Drive', 'success', '📎');
+      }
       comprobantesCargados = false; // fuerza recarga para que aparezca en la lista
       const clienteId = comprobanteClienteActual.id;
-      setTimeout(()=>{ cerrarModal('modal-comprobante'); cargarComprobantes().then(()=>verDetalle(clienteId)); }, 1000);
+      setTimeout(()=>{ cerrarModal('modal-comprobante'); cargarComprobantes().then(()=>verDetalle(clienteId)); }, res.pendiente ? 1800 : 1000);
     } else throw new Error(res.message);
   } catch(err) {
     status.innerHTML = `<div class="error-msg">⚠️ No se pudo subir. Intenta de nuevo.<br><small>${esc(err.message||'')}</small></div>`;
@@ -4522,6 +4768,17 @@ function renderConfig() {
     </div>
 
     <div id="config-vendedores" style="display:none;">
+      <div style="background:${MI_MODO_APROBACION?'var(--green-bg)':'var(--amber-bg)'};border:1px solid ${MI_MODO_APROBACION?'rgba(52,211,153,0.35)':'rgba(251,191,36,0.35)'};border-radius:12px;padding:14px 16px;margin-bottom:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
+          <div style="flex:1;">
+            <div style="font-size:12.5px;font-weight:700;color:${MI_MODO_APROBACION?'var(--green)':'var(--amber)'};margin-bottom:4px;">✋ Autorizar cambios de vendedores</div>
+            <div style="font-size:12px;color:var(--text2);line-height:1.5;">${MI_MODO_APROBACION
+              ? 'ACTIVADO: cuando un vendedor renueva, edita, archiva o sube un comprobante, no se aplica nada hasta que tú lo apruebes en la pestaña "Autorizar".'
+              : 'APAGADO: los cambios de tus vendedores se aplican al instante, sin pasar por ti.'}</div>
+          </div>
+          <button class="btn-primary" style="width:auto;margin-top:0;padding:9px 16px;font-size:13px;white-space:nowrap;${MI_MODO_APROBACION?'background:var(--surface);color:var(--text2);border:1px solid var(--border);box-shadow:none;':''}" onclick="cambiarModoAprobacion(${MI_MODO_APROBACION?'false':'true'})">${MI_MODO_APROBACION?'Apagar':'Activar'}</button>
+        </div>
+      </div>
       <div style="font-size:12px;color:var(--text2);margin-bottom:12px;">Ajusta el % de comisión real de cada vendedor — se aplica directo al calcular ganancias.</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         ${vendedores.map(v => `
@@ -4747,6 +5004,22 @@ function actualizarPaquete(idx, nombre) {
       })
       .catch(()=>toast('Se guardó local, pero no se pudo sincronizar con Sheets', 'error'));
   }
+}
+
+// Enciende/apaga la cola de autorizaciones (solo admin). Apagarlo hace que los
+// cambios de los vendedores vuelvan a aplicarse al instante.
+function cambiarModoAprobacion(activar) {
+  postDatos({accion:'guardarModoAprobacion', key:APP_KEY, activo:!!activar})
+    .then(res => {
+      if (res.status !== 'ok') throw new Error(res.message||'No se pudo cambiar');
+      MI_MODO_APROBACION = !!res.activo;
+      toast(MI_MODO_APROBACION ? 'Ahora los cambios pasan por ti' : 'Los cambios se aplican al instante', 'success', '✋');
+      renderConfig();
+      // Reabre la pestaña de Vendedores, que es donde vive este ajuste.
+      showConfigTab('vendedores', Array.from(document.querySelectorAll('#config-tabs .f-btn')).find(b=>b.textContent.includes('Vendedores')));
+      cargarSolicitudes(true);
+    })
+    .catch(err => toast(err.message||'No se pudo cambiar', 'error'));
 }
 
 // ===== PENDIENTE 4: % de comisión por vendedor =====
@@ -5299,6 +5572,14 @@ function guardarRenovacion() {
   postDatos(datos)
     .then(res => {
       if (res.status === 'ok') {
+        // Con el modo autorización encendido, un vendedor NO renovó: mandó la
+        // solicitud. El mensaje tiene que decirlo claro para que no crea que
+        // ya quedó y le cobre otra vez al cliente.
+        if (res.pendiente) {
+          avisoPendienteAprobacion_('renovar-status');
+          setTimeout(() => cerrarModal('modal-renovar'), 2200);
+          return;
+        }
         document.getElementById('renovar-status').innerHTML = '<div class="success-box"><p>✅ Renovación registrada</p></div>';
         toast(res.precioProtegido ? 'Renovado con precio protegido 🔒' : 'Cliente renovado, ¡a seguir!', 'success', '🔁');
         marcarDatosSucios();
@@ -5470,6 +5751,12 @@ async function guardarEdicion() {
   postDatos(datos)
     .then(res => {
       if (res.status === 'ok') {
+        if (res.pendiente) {
+          avisoPendienteAprobacion_('editar-status');
+          btn.textContent = 'Enviado ⏳';
+          setTimeout(() => cerrarModal('modal-editar'), 2200);
+          return;
+        }
         // Si el combo cambió a mitad de ciclo, el servidor abona/descuenta la
         // DIFERENCIA de comisión solo (ver ajustarComisionPorCambioCombo_ en
         // el backend) y aquí se avisa cuánto fue, para que no parezca que la
@@ -5526,6 +5813,14 @@ function confirmarArchivar(id) {
     return postDatos({accion:'archivarCliente', key:APP_KEY, id})
       .then(res => {
         if (res.status==='ok') {
+          // Pendiente de autorización: el cliente NO se archivó todavía, así
+          // que no se toca el estado local (si no, desaparecería de la lista
+          // como si ya estuviera archivado).
+          if (res.pendiente) {
+            cerrarModal('modal-detalle');
+            avisoPendienteAprobacion_(null);
+            return true;
+          }
           setEstadoLocal(id, 'ARCHIVADO');
           const idx = todosClientes.findIndex(x => x.id === id);
           if (idx >= 0) todosClientes[idx].estado_raw = 'ARCHIVADO';
@@ -5536,7 +5831,7 @@ function confirmarArchivar(id) {
           toast('Cliente archivado');
           return true;
         }
-        toast('Error al archivar', 'error'); return false;
+        toast(res.message || 'Error al archivar', 'error'); return false;
       });
   });
 }
@@ -5549,6 +5844,7 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{
 function aplicarPermisosUI() {
   document.getElementById('user-nombre').textContent = MI_NOMBRE;
   document.getElementById('user-av').textContent = iniciales(MI_NOMBRE);
+  actualizarBadgeAutorizar_();
   if (MI_ROL === 'admin') {
     document.getElementById('tab-historial-mensual').style.display = 'inline-block';
   }
@@ -5593,11 +5889,15 @@ function hacerLogin() {
           cargarConfigLocal();
         } catch(e){}
         document.getElementById('login-overlay').style.display='none';
+        if (res.modoAprobacion !== undefined) MI_MODO_APROBACION = !!res.modoAprobacion;
         aplicarPermisosUI();
         cargarDatos();
         cargarCuentasBackground();
         cargarLedger();
         sincronizarConfigCatalogoServidor_();
+        // La cola de autorizaciones se trae de entrada: así el badge rojo con
+        // lo pendiente se ve desde el primer segundo, sin entrar a la pestaña.
+        cargarSolicitudes(true);
       } else {
         err.textContent = res.message || 'Usuario o clave incorrectos.';
         err.style.display='block';
@@ -5734,11 +6034,15 @@ window.addEventListener('resize', () => {
         APP_KEY = saved; MI_VENDEDOR = res.vendedor; MI_ROL = res.rol; MI_NOMBRE = res.nombre;
         try { cargarConfigLocal(); } catch(e){}
         document.getElementById('login-overlay').style.display='none';
+        if (res.modoAprobacion !== undefined) MI_MODO_APROBACION = !!res.modoAprobacion;
         aplicarPermisosUI();
         cargarDatos();
         cargarCuentasBackground();
         cargarLedger();
         sincronizarConfigCatalogoServidor_();
+        // La cola de autorizaciones se trae de entrada: así el badge rojo con
+        // lo pendiente se ve desde el primer segundo, sin entrar a la pestaña.
+        cargarSolicitudes(true);
       } else {
         try { localStorage.removeItem('app_key'); } catch(e){}
       }
