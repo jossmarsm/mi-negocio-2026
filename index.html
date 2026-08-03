@@ -1534,6 +1534,14 @@ function hoyInputLocal() {
   const d = new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
+// Suma meses SIN desbordar el día: 31/01 + 1 mes debe dar fin de febrero,
+// no 02/03 — setMonth a secas regalaba unos días de ciclo en fechas 29-31.
+function sumarMeses_(d, meses) {
+  const dia = d.getDate();
+  d.setMonth(d.getMonth() + meses);
+  if (d.getDate() !== dia) d.setDate(0); // se desbordó: último día del mes correcto
+  return d;
+}
 function nuevoOpId() {
   return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,10);
 }
@@ -1808,6 +1816,10 @@ function marcarDatosSucios() {
   cuentasCargadas = false;
   gananciasCargadas = false;
   actividadCargada = false; // el historial también quedó viejo tras un cambio
+  // El libro de comisiones en memoria también: sin esto, el "Historial de
+  // ciclos" de la ficha y las notificaciones de dinero mostraban el libro
+  // viejo hasta que el usuario entrara a Ganancias.
+  ledgerCargado = false;
 }
 
 function showGananciasTab(tab, btn) {
@@ -1859,7 +1871,7 @@ function graficaCrecimientoHTML() {
         <div class="gb-lbl">${x.label}</div>
       </div>`).join('')}
     </div>
-    <div class="grafica-nota">Altas y renovaciones por mes (clientes con inicio en cada mes).</div>
+    <div class="grafica-nota">Altas por mes (clientes nuevos según su fecha de inicio; las renovaciones no se cuentan aquí).</div>
   </div>`;
 }
 
@@ -2039,8 +2051,10 @@ function calcularNotificaciones() {
   if (MI_ROL === 'admin' && cuentasCargadas && todasCuentas.length) {
     let llenas = 0, casi = 0;
     todasCuentas.forEach(c => {
-      const occ = c.slots.filter(s => s && s!=='x' && s!=='X').length;
-      const blq = c.slots.filter(s => s==='x' || s==='X').length;
+      // Solo los slots reales de la cuenta (slice a slotsTotal), como en renderCuentas.
+      const reales = c.slots.slice(0, c.slotsTotal);
+      const occ = reales.filter(s => s && s!=='x' && s!=='X').length;
+      const blq = reales.filter(s => s==='x' || s==='X').length;
       const lib = c.slotsTotal - occ - blq;
       if (lib <= 0) llenas++; else if (lib === 1) casi++;
     });
@@ -2083,7 +2097,7 @@ function calcularNotificaciones() {
       const ultimo = nuevos[nuevos.length - 1];
       out.push({ sev:'azul', icon:'📦',
         titulo:`${nuevos.length} cambio${nuevos.length!==1?'s':''} en el catálogo`,
-        detalle: nuevos.length===1 ? `${ultimo.nombre}: ${fraseCambioCombo_(ultimo, esAdmin)}` : 'Precios o comisiones se actualizaron — revisa qué te toca.',
+        detalle: nuevos.length===1 ? `${esc(ultimo.nombre)}: ${esc(fraseCambioCombo_(ultimo, esAdmin))}` : 'Precios o comisiones se actualizaron — revisa qué te toca.',
         accion:()=>irASeccion('catalogo') });
     }
   }
@@ -2271,7 +2285,9 @@ function renderRacha(activos, numVencidos) {
   }
 }
 function actualizarAlerta() {
-  const p = todosClientes.filter(c=>c.estado==='proximo');
+  // Sin archivados: mismo criterio que las métricas de arriba (un archivado
+  // con fecha próxima inflaba el banner y contradecía el contador).
+  const p = todosClientes.filter(c=>c.estado_raw!=='ARCHIVADO' && c.estado==='proximo');
   document.getElementById('alerta-container').innerHTML = p.length>0
     ? `<div class="alerta">⚠️ ${p.length} cliente${p.length!==1?'s':''} vence${p.length===1?'':'n'} en los próximos 5 días</div>` : '';
 }
@@ -2279,7 +2295,7 @@ function estadoVacioClientes(busqueda) {
   if (busqueda) {
     return `<div class="empty">
       <div class="empty-icon">🔍</div>
-      <div class="empty-title">Sin resultados para "${busqueda}"</div>
+      <div class="empty-title">Sin resultados para "${esc(busqueda)}"</div>
       <div class="empty-sub">Prueba con otro nombre, paquete o vendedor</div>
     </div>`;
   }
@@ -2507,7 +2523,9 @@ function exportarCSV() {
     const esVend = c.vendedor && c.vendedor.toLowerCase()!=='yo';
     const paqData = buscarDatosCombo_(c.paquete); // con prefijo: combos legados no salen en $0
     const pct = COMISIONES[(c.vendedor||'').toLowerCase()] !== undefined ? COMISIONES[(c.vendedor||'').toLowerCase()] : 100;
-    const comic = (esVend && paqData) ? paqData.gananciaAmigo*(pct/100) : 0;
+    // Mismo factor de meses que la ficha: una venta de 3 meses exporta 3× comisión.
+    const factorCSV = paqData ? Math.max(1, parseInt(c.meses)||1) / Math.max(1, parseInt(paqData.meses)||1) : 1;
+    const comic = (esVend && paqData) ? paqData.gananciaAmigo*(pct/100)*factorCSV : 0;
     const gan = parseFloat(c.ganancia)||0;
     const esArch = c.estado_raw==='ARCHIVADO';
     if (!esArch) { totPrecio += parseFloat(c.precio)||0; totComic += comic; totGan += gan; }
@@ -2532,8 +2550,11 @@ function exportarCuentas() {
     if (!todasCuentas.length) { toast('No hay cuentas que exportar', 'error'); return; }
     const cols = ['Nombre','Plataforma','Correo','Contraseña','Cuenta de pago','Slots totales','Ocupados','Libres','Clientes en slots'];
     const filas = todasCuentas.map(c=>{
-      const usados = c.slots.slice(0,c.slotsTotal).filter(s=>s && s.trim());
-      return [c.nombre, c.plataforma, c.correo, c.contrasena, c.cuentaPago, c.slotsTotal, usados.length, c.slotsTotal-usados.length, usados.join(' / ')];
+      const reales = c.slots.slice(0,c.slotsTotal);
+      // Las 'x' son slots BLOQUEADOS, no clientes: van en su propia columna.
+      const usados = reales.filter(s=>s && s.trim() && s!=='x' && s!=='X');
+      const bloqueados = reales.filter(s=>s==='x'||s==='X').length;
+      return [c.nombre, c.plataforma, c.correo, c.contrasena, c.cuentaPago, c.slotsTotal, usados.length, c.slotsTotal-usados.length-bloqueados, usados.join(' / ') + (bloqueados?` (+${bloqueados} bloqueado${bloqueados!==1?'s':''})`:'')];
     });
     descargarCSV_(cols, filas, 'cuentas');
     toast('Exportadas '+filas.length+' cuentas', 'success', '🔑');
@@ -2672,6 +2693,15 @@ function verDetalle(id) {
   if (!comprobantesCargados) {
     cargarComprobantes().then(() => {
       if (detalleAbiertoId === id && document.getElementById('modal-detalle').classList.contains('open')) verDetalle(id);
+    });
+  }
+  // Igual con el libro de comisiones: si quedó marcado como viejo (se acaba de
+  // renovar/editar algo), se refresca en segundo plano y la ficha se repinta
+  // con el "Historial de ciclos" al día. El guard de ledgerCargado evita
+  // reintentar en bucle si la recarga falla.
+  if (!ledgerCargado) {
+    cargarLedger().then(() => {
+      if (ledgerCargado && detalleAbiertoId === id && document.getElementById('modal-detalle').classList.contains('open')) verDetalle(id);
     });
   }
 }
@@ -2880,7 +2910,7 @@ function calcularRenovacion() {
   const sel=document.getElementById('n-paquete').value;
   const nombre=sel?sel.split('|')[0]:'';
   const meses=nombre?factorMesesVenta_('n-meses', nombre).meses:1;
-  d.setMonth(d.getMonth()+meses);
+  sumarMeses_(d, meses);
   document.getElementById('n-renovacion').value=formatoDDMMYYYY(d);
 }
 function actualizarPrecio() {
@@ -3476,8 +3506,11 @@ function renderCuentas() {
   // Aviso de cuentas llenas o por llenarse — para saber cuándo comprar otra.
   let nLlenas=0, nCasi=0;
   lista.forEach(c => {
-    const occ = c.slots.filter(s => s && s!=='x' && s!=='X').length;
-    const blq = c.slots.filter(s => s==='x' || s==='X').length;
+    // Solo los slots REALES de la cuenta (slice a slotsTotal): texto residual
+    // en un slot sobrante hacía ver cuentas "LLENAS" que no lo estaban.
+    const reales = c.slots.slice(0, c.slotsTotal);
+    const occ = reales.filter(s => s && s!=='x' && s!=='X').length;
+    const blq = reales.filter(s => s==='x' || s==='X').length;
     const lib = c.slotsTotal - occ - blq;
     if (lib<=0) nLlenas++; else if (lib===1) nCasi++;
   });
@@ -3493,8 +3526,9 @@ function renderCuentas() {
   Object.keys(grupos).forEach(plat => {
     html += `<div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.05em;margin:18px 0 8px;">${PLAT_ICONS[plat]||'📦'} ${esc(plat)}</div>`;
     grupos[plat].forEach((c, idx) => {
-      const ocupados = c.slots.filter(s => s && s !== 'x' && s !== 'X').length;
-      const bloqueados = c.slots.filter(s => s === 'x' || s === 'X').length;
+      const slotsReales = c.slots.slice(0, c.slotsTotal);
+      const ocupados = slotsReales.filter(s => s && s !== 'x' && s !== 'X').length;
+      const bloqueados = slotsReales.filter(s => s === 'x' || s === 'X').length;
       const libres = c.slotsTotal - ocupados - bloqueados;
       const slotsMini = c.slots.slice(0, c.slotsTotal).map(s => {
         if (!s) return '<div class="slot-mini libre" title="Libre"></div>';
@@ -3551,8 +3585,8 @@ function renderCuentas() {
             // muertos en slots de otro vendedor, sin exponer datos ajenos.
             return `<div class="slot-row">
               <div class="slot-num">Slot ${i+1}</div>
-              <div class="slot-cliente"${cliente ? ` style="cursor:pointer;" onclick="verDetalle('${s}')" title="Ver detalles de este cliente"` : ''}>${esc(nombreCliente)}${cliente ? ' <span style="color:var(--violet2);">›</span>' : ''}<div style="font-size:11px;color:var(--text3);">${esc(s)}</div></div>
-              ${MI_ROL==='admin' ? `<button class="slot-action" onclick="event.stopPropagation();liberarSlot('${c.nombre}','${i}')">Liberar</button>` : ''}
+              <div class="slot-cliente"${cliente ? ` style="cursor:pointer;" onclick="verDetalle(${esc(JSON.stringify(s))})" title="Ver detalles de este cliente"` : ''}>${esc(nombreCliente)}${cliente ? ' <span style="color:var(--violet2);">›</span>' : ''}<div style="font-size:11px;color:var(--text3);">${esc(s)}</div></div>
+              ${MI_ROL==='admin' ? `<button class="slot-action" onclick="event.stopPropagation();liberarSlot(${nombreArgCuenta},${i})">Liberar</button>` : ''}
             </div>`;
           }).join('')}
           ${MI_ROL==='admin' ? renderAccionesCuenta(c) : ''}
@@ -3779,7 +3813,7 @@ function abrirAvisarCuenta(nombreCuenta) {
   document.getElementById('av-nombre').textContent = c.nombre + ' · ' + c.plataforma;
   document.getElementById('av-datos').innerHTML =
     `<div style="font-size:12px;color:var(--text2);">Datos que se enviarán:</div>
-     <div style="font-size:13px;margin-top:4px;">📧 ${c.correo||'—'} &nbsp;·&nbsp; 🔑 ${c.contrasena||'—'}</div>`;
+     <div style="font-size:13px;margin-top:4px;">📧 ${esc(c.correo||'—')} &nbsp;·&nbsp; 🔑 ${esc(c.contrasena||'—')}</div>`;
 
   const cont = document.getElementById('av-lista');
   if (!clientesEnCuenta.length) {
@@ -3791,8 +3825,8 @@ function abrirAvisarCuenta(nombreCuenta) {
       return `<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:0.5px solid var(--border);">
         <div class="avatar" style="width:36px;height:36px;font-size:12px;background:${col.bg};color:${col.color};">${iniciales(cl.cliente)}</div>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:13px;font-weight:600;">${cl.cliente}</div>
-          <div style="font-size:11px;color:var(--text3);">${tieneTel ? cl.contacto : 'Sin teléfono guardado'}</div>
+          <div style="font-size:13px;font-weight:600;">${esc(cl.cliente)}</div>
+          <div style="font-size:11px;color:var(--text3);">${tieneTel ? esc(cl.contacto) : 'Sin teléfono guardado'}</div>
         </div>
         ${tieneTel
           ? `<button class="acc-btn" style="background:var(--green-bg);border-color:rgba(52,211,153,0.35);color:var(--green);" onclick="enviarAvisoContrasena('${cl.id}')">💬 Avisar</button>`
@@ -3851,7 +3885,11 @@ function montoBaseCliente_(c) {
   const pd = buscarDatosCombo_(c.paquete);
   if (!pd) return 0;
   const pct = COMISIONES[MI_VENDEDOR] !== undefined ? COMISIONES[MI_VENDEDOR] : 100;
-  return (pd.gananciaAmigo || 0) * (pct/100);
+  // Mismo factor de meses que la ficha del cliente: una venta de 3 meses vale
+  // 3× comisión también aquí (hero de Ganancias y renovación protegida) — si
+  // no, esos números contradecían a la ficha y subcontaban ventas multi-mes.
+  const factorMeses = Math.max(1, parseInt(c.meses)||1) / Math.max(1, parseInt(pd.meses)||1);
+  return (pd.gananciaAmigo || 0) * (pct/100) * factorMeses;
 }
 
 function renderGanancias() {
@@ -4924,6 +4962,12 @@ function guardarNuevoCombo() {
     status.innerHTML = '<div class="error-msg">⚠️ Pon un nombre y un precio válido.</div>';
     return;
   }
+  // El carácter | separa nombre|precio|ganancias en los selects de paquete:
+  // un combo con | en el nombre descuadraría todos esos split('|').
+  if (nombre.includes('|')) {
+    status.innerHTML = '<div class="error-msg">⚠️ El nombre no puede llevar el carácter "|".</div>';
+    return;
+  }
   if (amigo < 0 || neta < 0) {
     status.innerHTML = '<div class="error-msg">⚠️ Las ganancias no pueden ser negativas.</div>';
     return;
@@ -5128,7 +5172,7 @@ function calcularRenovacionRenovar() {
   // El vencimiento depende de la duración ELEGIDA del ciclo (por defecto, la
   // base del combo; más si el cliente pagó varios meses de un jalón).
   const fmRen = factorMesesVenta_('renovar-meses', paqueteParaGanancia);
-  const d = fechaInputLocal(inicio); if(!d) return; d.setMonth(d.getMonth()+fmRen.meses);
+  const d = fechaInputLocal(inicio); if(!d) return; sumarMeses_(d, fmRen.meses);
   document.getElementById('renovar-fecha-renovacion').value = formatoDDMMYYYY(d);
 
   const protegido = clientePrecioProtegido_(c, !!selVal);
@@ -5299,7 +5343,7 @@ function abrirEditar(id) {
   } else {
     document.getElementById('e-paquete').value = '';
     document.getElementById('e-precio').value = c.precio ? '$'+c.precio : '';
-    document.getElementById('e-cuentas-selects').innerHTML = `<div style="font-size:13px;color:var(--text3);">Paquete no reconocido — cuenta actual: ${c.cuenta||'ninguna'}. Selecciona un paquete válido para reasignar.</div>`;
+    document.getElementById('e-cuentas-selects').innerHTML = `<div style="font-size:13px;color:var(--text3);">Paquete no reconocido — cuenta actual: ${esc(c.cuenta||'ninguna')}. Sus cuentas y slots se conservan tal cual al guardar; elige un paquete del catálogo solo si quieres reasignarlas.</div>`;
   }
   document.getElementById('editar-status').innerHTML = '';
   document.getElementById('btn-editar').disabled = false;
@@ -5330,7 +5374,7 @@ function calcularRenovacionEditar() {
   const sel = document.getElementById('e-paquete').value;
   const nombre = sel ? sel.split('|')[0] : '';
   const meses = nombre ? mesesCombo(nombre) : 1;
-  const d = fechaInputLocal(inicio); if(!d) return; d.setMonth(d.getMonth() + meses);
+  const d = fechaInputLocal(inicio); if(!d) return; sumarMeses_(d, meses);
   document.getElementById('e-renovacion').value = formatoDDMMYYYY(d);
 }
 
@@ -5396,7 +5440,6 @@ async function guardarEdicion() {
     contacto: document.getElementById('e-contacto').value.trim(),
     paquete: sel ? sel.split('|')[0] : '',
     precio: sel ? precioBonito_((parseFloat(sel.split('|')[1])||0) * ((Math.max(1,parseInt(cOrig&&cOrig.meses)||1))/mesesCombo(sel.split('|')[0]))) : document.getElementById('e-precio').value.replace('$',''),
-    cuenta: selectsEd.map(s=>s.value).filter(Boolean).join(', '),
     inicio: document.getElementById('e-inicio').value ? formatoDDMMYYYY(fechaInputLocal(document.getElementById('e-inicio').value)) : '',
     renovacion: document.getElementById('e-renovacion').value,
     vendedor: vendedorSel,
@@ -5404,6 +5447,18 @@ async function guardarEdicion() {
     estado: document.getElementById('e-estado').value,
     notas: document.getElementById('e-notas').value.trim(),
   };
+  // ===== Cuentas/slots: no borrar lo que nadie tocó =====
+  // El campo 'cuenta' SOLO viaja cuando hay un combo reconocido Y sus selects
+  // de cuentas llegaron a renderizarse (la validación de arriba ya garantizó
+  // que están completos). Si el combo del cliente no está en el catálogo
+  // (sel vacío) los selects no existen, y antes se mandaba cuenta:'' — el
+  // backend lo tomaba como "quitarle todas las cuentas" y LIBERABA los slots
+  // del cliente sin que nadie lo pidiera (el cliente quedaba perdido, sin
+  // saber en qué cuenta iba). Omitiendo el campo, el backend conserva las
+  // cuentas y slots exactamente como estaban.
+  if (sel && selectsEd.length) {
+    datos.cuenta = selectsEd.map(s=>s.value).filter(Boolean).join(', ');
+  }
   if (gananciaRecalculada !== null) {
     datos.ganancia = gananciaRecalculada.toFixed(2);
   }
@@ -5457,7 +5512,9 @@ function reactivarCliente(id) {
           toast('De vuelta en acción', 'success', '✅');
           return true;
         }
-        toast('Error al reactivar', 'error'); return false;
+        // El servidor puede explicar por qué (ej. sus cuentas ya no tienen
+        // slots libres al reactivar) — se muestra tal cual.
+        toast(res.message || 'Error al reactivar', 'error'); return false;
       });
   });
 }
